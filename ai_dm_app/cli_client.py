@@ -4,7 +4,7 @@ import time
 from typing import Optional, Dict, List
 from datetime import datetime
 
-BASE_URL = "http://127.0.0.1:5000"
+BASE_URL = "https://6059-108-85-196-134.ngrok-free.app"
 
 class DnDClient:
     def __init__(self):

@@ -76,6 +76,26 @@ def handle_interaction(session_id):
     user_input = data['user_input']
     campaign_id = data['campaign_id']
     world_id = data['world_id']
+    
+    # OPTIONAL: Grab an optional "player_id" or "player_name" from the payload
+    player_id = data.get('player_id')  # might be None if not supplied
+    
+    # Build context for the AI
+    context = build_dm_context(world_id, campaign_id, session_id)
+    system_message = (
+        "You are an experienced Dungeons & Dragons Dungeon Master running a tabletop RPG session..."
+        + context
+    )
+    
+    # Get AI response
+    ai_response = query_gpt(user_input, system_message)
+    
+    # Record the interaction (now passing in player_id)
+    record_interaction(session_id, user_input, ai_response, player_id=player_id)
+    
+    # Format the response
+    formatted_response = ai_response.replace('\n', '<br>')
+    return jsonify({"dm_response": formatted_response})
 
     # Build context and get AI response
     context = build_dm_context(world_id, campaign_id, session_id)

@@ -14,21 +14,24 @@ def start_session(campaign_id):
     session_id = create_session(campaign_id)
     return session_id
 
-def record_interaction(session_id, user_input, ai_response):
-    """
-    Record a player-DM interaction in the session log.
-    Args:
-        session_id (int): ID of the current session
-        user_input (str): Player's input/action
-        ai_response (str): DM's (AI) response
-    """
+def record_interaction(session_id, user_input, ai_response, player_id=None):
     session = get_session(session_id)
     existing_log = session["session_log"] if session["session_log"] else ""
-    
-    # Format the new interaction
-    new_interaction = f"\nPlayer: {user_input}\nDM: {ai_response}\n"
+
+    # If you want to retrieve the player's actual name, you can do so here:
+    player_label = "Player"
+    if player_id:
+        from models import get_player_by_id
+        player_data = get_player_by_id(player_id)
+        if player_data and player_data['character_name']:
+            player_label = player_data['character_name']
+        else:
+            # If no character name is found, just log "Player <ID>"
+            player_label = f"Player {player_id}"
+
+    new_interaction = f"\n{player_label}: {user_input}\nDM: {ai_response}\n"
     updated_log = existing_log + new_interaction if existing_log else new_interaction
-    
+
     # Save to database
     update_session_log(session_id, updated_log)
 
