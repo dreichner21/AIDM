@@ -7,15 +7,15 @@ load_dotenv()
 
 # Initialize Gemini API
 genai.configure(api_key="AIzaSyBvsMef-geqcJJDof6hZitpLWSUxhiR1Ds")
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-1.5-pro")
 
-def query_gpt(prompt, system_message=None, model_name="gemini-1.5-flash"):
+def query_gpt(prompt, system_message=None, model_name="gemini-1.5-pro"):
     """
     Send a conversation to the Gemini API and return the assistant's response.
     Args:
         prompt (str): The user's input
         system_message (str, optional): Context/instructions for the AI
-        model_name (str): The model to use (ignored as we're using gemini-1.5-flash)
+        model_name (str): The model to use (ignored as we're using gemini-1.5-pro)
     Returns:
         str: The AI's response
     """
@@ -46,7 +46,7 @@ def build_dm_context(world_id, campaign_id, session_id=None):
     campaign = get_campaign_by_id(campaign_id)
     campaign_summary = f"Campaign: {campaign['title']}\nDescription: {campaign['description']}"
     
-    # Get player information
+    # Get player information with character sheets
     players = get_players_in_campaign(campaign_id)
     player_summaries = []
     for player in players:
@@ -54,6 +54,8 @@ def build_dm_context(world_id, campaign_id, session_id=None):
             f"{player['character_name']} ({player['race']} {player['class']}, "
             f"Level {player['level']})"
         )
+        if player['character_sheet']:
+            player_summary += f"\nCharacter Sheet Details:\n{player['character_sheet']}"
         player_summaries.append(player_summary)
     
     players_text = "Party Members:\n" + "\n".join(player_summaries)

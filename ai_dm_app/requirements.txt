@@ -1,1 +1,8 @@
- 
+flask==3.0.2
+flask-cors==4.0.0
+python-dotenv==1.0.1
+requests==2.31.0
+google-generativeai==0.3.2
+SQLAlchemy==2.0.28
+alembic==1.13.1
+python-json-logger==2.0.7 
