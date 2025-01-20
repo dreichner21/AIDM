@@ -3,32 +3,20 @@ import sys
 import time
 from typing import Optional, Dict, List
 from datetime import datetime
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-# Default to localhost if no server URL is provided
-DEFAULT_SERVER_URL = "http://127.0.0.1:5000"
+BASE_URL = "http://127.0.0.1:5000"
 
 class DnDClient:
-    def __init__(self, server_url: Optional[str] = None, api_key: Optional[str] = None):
+    def __init__(self):
         self.campaign_id: Optional[int] = None
         self.world_id: Optional[int] = None
         self.session_id: Optional[int] = None
-        self.server_url = server_url or DEFAULT_SERVER_URL
-        self.api_key = api_key or os.getenv('DND_API_KEY')
-        if not self.api_key:
-            raise ValueError("API key must be provided either in constructor or DND_API_KEY environment variable")
-        
-        # Set up common headers
-        self.headers = {'X-API-Key': self.api_key}
 
     def check_server(self) -> bool:
         """Check if the server is running."""
         try:
-            # Try to connect to the base URL with API key
-            requests.get(self.server_url, headers=self.headers)
+            # Try to connect to the base URL
+            requests.get(BASE_URL)
             return True
         except requests.RequestException:
             return False
@@ -42,20 +30,20 @@ class DnDClient:
             if self.check_server():
                 print("Server is running!")
                 return True
-            print(f"Server not available at {self.server_url}")
+            print("Server not available. Make sure to run 'python app.py' in another terminal.")
             print("Retrying in 5 seconds...")
             time.sleep(5)
         
         print(f"\nServer connection timed out after {timeout} seconds.")
+        print("Please make sure the Flask server is running by executing:")
+        print("cd ai_dm_app")
+        print("python app.py")
         return False
 
     def list_sessions(self, campaign_id: int) -> List[Dict]:
         """List all sessions for a campaign."""
         try:
-            response = requests.get(
-                f"{self.server_url}/campaigns/{campaign_id}/sessions",
-                headers=self.headers
-            )
+            response = requests.get(f"{BASE_URL}/campaigns/{campaign_id}/sessions")
             response.raise_for_status()
             sessions = response.json()
             return sessions
@@ -85,9 +73,8 @@ class DnDClient:
         
         try:
             response = requests.post(
-                f"{self.server_url}/sessions/start",
-                json={"campaign_id": campaign_id},
-                headers=self.headers
+                f"{BASE_URL}/sessions/start",
+                json={"campaign_id": campaign_id}
             )
             response.raise_for_status()
             self.session_id = response.json()["session_id"]
@@ -97,7 +84,6 @@ class DnDClient:
             print("\nPlease verify that:")
             print("1. The campaign ID exists in the database")
             print("2. The server is running properly")
-            print("3. Your API key is correct")
             return False
 
     def send_message(self, user_input: str) -> Optional[str]:
@@ -108,20 +94,19 @@ class DnDClient:
 
         try:
             response = requests.post(
-                f"{self.server_url}/sessions/{self.session_id}/interact",
+                f"{BASE_URL}/sessions/{self.session_id}/interact",
                 json={
                     "user_input": user_input,
                     "campaign_id": self.campaign_id,
                     "world_id": self.world_id
-                },
-                headers=self.headers
+                }
             )
             response.raise_for_status()
             return response.json().get("dm_response", "").replace("<br>", "\n")
         except requests.RequestException as e:
             print(f"Error sending message: {e}")
             if not self.check_server():
-                print("Server connection lost!")
+                print("Server connection lost! Please restart the server and try again.")
             return None
 
     def end_session(self) -> Optional[str]:
@@ -130,10 +115,7 @@ class DnDClient:
             return None
 
         try:
-            response = requests.post(
-                f"{self.server_url}/sessions/{self.session_id}/end",
-                headers=self.headers
-            )
+            response = requests.post(f"{BASE_URL}/sessions/{self.session_id}/end")
             response.raise_for_status()
             return response.json().get("recap")
         except requests.RequestException as e:
@@ -141,37 +123,19 @@ class DnDClient:
             return None
 
 def main():
-    # Get server URL and API key from environment variable or command line
-    server_url = os.environ.get('DND_SERVER_URL') or (sys.argv[3] if len(sys.argv) > 3 else None)
-    api_key = os.environ.get('DND_API_KEY') or (sys.argv[4] if len(sys.argv) > 4 else None)
-    
-    # Debug information
-    print("\nDebug Info:")
-    print(f"API Key from environment: {'Present' if os.environ.get('DND_API_KEY') else 'Not found'}")
-    print(f"Server URL: {server_url}")
-    if not api_key:
-        print("Warning: No API key found in environment or command line arguments")
+    # Initialize client
+    client = DnDClient()
     
     try:
-        # Initialize client
-        client = DnDClient(server_url, api_key)
-        
         # Get campaign and world IDs from command line or use defaults
         campaign_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
         world_id = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    except (IndexError, ValueError) as e:
-        if isinstance(e, ValueError) and str(e).startswith("API key must be provided"):
-            print("\nError: API key is required. You can provide it in two ways:")
-            print("1. Set DND_API_KEY environment variable")
-            print("2. Pass it as the fourth argument")
-        else:
-            print("\nUsage: python cli_client.py [campaign_id] [world_id] [server_url] [api_key]")
-            print("Or set environment variables:")
-            print("  DND_SERVER_URL - for server URL")
-            print("  DND_API_KEY - for API key")
-            print("\nUsing default values: campaign_id=1, world_id=1")
-        return
-    
+    except (IndexError, ValueError):
+        print("Usage: python cli_client.py [campaign_id] [world_id]")
+        print("Using default values: campaign_id=1, world_id=1")
+        campaign_id = 1
+        world_id = 1
+
     # List existing sessions
     print("\nExisting sessions for this campaign:")
     sessions = client.list_sessions(campaign_id)

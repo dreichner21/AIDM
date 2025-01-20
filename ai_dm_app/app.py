@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 from models import (
     create_world, get_world_by_id,
     create_campaign, get_campaign_by_id,
@@ -9,45 +8,19 @@ from models import (
 from session_logic import start_session, record_interaction, end_session, get_session_recap
 from llm import query_gpt, build_dm_context
 from db import init_db
-from functools import wraps
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
 # Initialize database
 init_db()
 
-# Get API key from environment variable or generate a new one
-API_KEY = os.getenv('DND_API_KEY')
-if not API_KEY:
-    import secrets
-    API_KEY = secrets.token_urlsafe(32)
-    print(f"\nNo API key found in environment. Generated new API key: {API_KEY}")
-    print("Add this to your .env file as DND_API_KEY=<key>")
-
-def require_api_key(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        api_key = request.headers.get('X-API-Key')
-        if api_key and api_key == API_KEY:
-            return f(*args, **kwargs)
-        return jsonify({"error": "Invalid or missing API key"}), 401
-    return decorated_function
-
-# Apply the decorator to all routes
 @app.route('/worlds', methods=['POST'])
-@require_api_key
 def create_new_world():
     data = request.json
     world_id = create_world(data['name'], data['description'])
     return jsonify({"world_id": world_id}), 201
 
 @app.route('/worlds/<int:world_id>', methods=['GET'])
-@require_api_key
 def get_world(world_id):
     world = get_world_by_id(world_id)
     if not world:
@@ -55,7 +28,6 @@ def get_world(world_id):
     return jsonify(world)
 
 @app.route('/campaigns', methods=['POST'])
-@require_api_key
 def create_new_campaign():
     data = request.json
     campaign_id = create_campaign(
@@ -66,7 +38,6 @@ def create_new_campaign():
     return jsonify({"campaign_id": campaign_id}), 201
 
 @app.route('/campaigns/<int:campaign_id>', methods=['GET'])
-@require_api_key
 def get_campaign(campaign_id):
     campaign = get_campaign_by_id(campaign_id)
     if not campaign:
@@ -74,9 +45,9 @@ def get_campaign(campaign_id):
     return jsonify(campaign)
 
 @app.route('/campaigns/<int:campaign_id>/players', methods=['POST'])
-@require_api_key
 def add_player(campaign_id):
     data = request.json
+    # No need to do data['campaign_id']—we already have campaign_id from the URL
     player_id = create_player(
         campaign_id,
         data['name'],
@@ -88,13 +59,11 @@ def add_player(campaign_id):
     return jsonify({"player_id": player_id}), 201
 
 @app.route('/campaigns/<int:campaign_id>/players', methods=['GET'])
-@require_api_key
 def get_players(campaign_id):
     players = get_players_in_campaign(campaign_id)
     return jsonify(players)
 
 @app.route('/sessions/start', methods=['POST'])
-@require_api_key
 def start_new_session():
     data = request.json
     campaign_id = data['campaign_id']
@@ -102,7 +71,6 @@ def start_new_session():
     return jsonify({"session_id": session_id}), 201
 
 @app.route('/sessions/<int:session_id>/interact', methods=['POST'])
-@require_api_key
 def handle_interaction(session_id):
     data = request.json
     user_input = data['user_input']
@@ -131,13 +99,11 @@ def handle_interaction(session_id):
     return jsonify({"dm_response": formatted_response})
 
 @app.route('/sessions/<int:session_id>/end', methods=['POST'])
-@require_api_key
 def end_game_session(session_id):
     recap = end_session(session_id)
     return jsonify({"recap": recap})
 
 @app.route('/sessions/<int:session_id>/recap', methods=['GET'])
-@require_api_key
 def get_session_summary(session_id):
     recap = get_session_recap(session_id)
     if not recap:
@@ -145,11 +111,9 @@ def get_session_summary(session_id):
     return jsonify({"recap": recap})
 
 @app.route('/campaigns/<int:campaign_id>/sessions', methods=['GET'])
-@require_api_key
 def list_campaign_sessions(campaign_id):
     sessions = get_sessions_by_campaign(campaign_id)
     return jsonify(sessions)
 
 if __name__ == '__main__':
-    # Allow external connections
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(debug=True) 
