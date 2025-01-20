@@ -4,13 +4,14 @@ import time
 from typing import Optional, Dict, List
 from datetime import datetime
 
-BASE_URL = "https://6059-108-85-196-134.ngrok-free.app"
+BASE_URL = "https://74bb-108-85-196-134.ngrok-free.app"
 
 class DnDClient:
     def __init__(self):
         self.campaign_id: Optional[int] = None
         self.world_id: Optional[int] = None
         self.session_id: Optional[int] = None
+        self.player_id: Optional[int] = None
 
     def check_server(self) -> bool:
         """Check if the server is running."""
@@ -86,20 +87,24 @@ class DnDClient:
             print("2. The server is running properly")
             return False
 
-    def send_message(self, user_input: str) -> Optional[str]:
+    def send_message(self, user_input: str, player_id: Optional[int] = None) -> Optional[str]:
         """Send a message to the DM and get response."""
         if not all([self.campaign_id, self.world_id, self.session_id]):
             print("Session not initialized!")
             return None
 
+        payload = {
+            "user_input": user_input,
+            "campaign_id": self.campaign_id,
+            "world_id": self.world_id
+        }
+        if player_id is not None:
+            payload["player_id"] = player_id
+
         try:
             response = requests.post(
                 f"{BASE_URL}/sessions/{self.session_id}/interact",
-                json={
-                    "user_input": user_input,
-                    "campaign_id": self.campaign_id,
-                    "world_id": self.world_id
-                }
+                json=payload
             )
             response.raise_for_status()
             return response.json().get("dm_response", "").replace("<br>", "\n")
@@ -130,11 +135,15 @@ def main():
         # Get campaign and world IDs from command line or use defaults
         campaign_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
         world_id = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        
+        # Extract player_id from command line arguments
+        player_id = int(sys.argv[3]) if len(sys.argv) > 3 else None
     except (IndexError, ValueError):
-        print("Usage: python cli_client.py [campaign_id] [world_id]")
-        print("Using default values: campaign_id=1, world_id=1")
+        print("Usage: python cli_client.py [campaign_id] [world_id] [player_id]")
+        print("Using default values: campaign_id=1, world_id=1, player_id=None")
         campaign_id = 1
         world_id = 1
+        player_id = None
 
     # List existing sessions
     print("\nExisting sessions for this campaign:")
@@ -177,7 +186,8 @@ def main():
             if user_input.lower() in ["exit", "quit"]:
                 break
             
-            response = client.send_message(user_input)
+            # Pass player_id to send_message
+            response = client.send_message(user_input, player_id)
             if response:
                 print(f"\nDM: {response}")
         except KeyboardInterrupt:
