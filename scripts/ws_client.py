@@ -1,29 +1,36 @@
+"""
+ws_client.py
+
+A sample WebSocket (SocketIO) client to demonstrate real-time interaction
+with the AI DM server. Uses `python-socketio` to connect and communicate.
+"""
+
 import requests
 import socketio
 import sys
 
 def choose_server_url():
+    """
+    Prompt the user for a server URL or fall back to a default value.
+    """
     default_url = "https://74bb-108-85-196-134.ngrok-free.app"
     user_input = input(f"Enter the server URL (Press Enter for {default_url}): ").strip()
     return user_input if user_input else default_url
 
 def list_campaigns(server_url):
-    print("\nFetching campaigns from server...")
+    """
+    Optional helper to list campaigns if your server supports a GET /campaigns route
+    that returns a list. Adjust as needed if you have a different mechanism.
+    """
     try:
+        print("\nFetching campaigns from server...")
         resp = requests.get(f"{server_url}/campaigns")
         if resp.status_code == 200:
             campaigns = resp.json()
-            # If there's no direct list endpoint in your code, 
-            # you might need to handle that differently or omit this step.
-            # Alternatively, you can store campaigns if you coded an endpoint like /campaigns returning a list.
-            if isinstance(campaigns, dict) and 'error' in campaigns:
-                print("Error fetching campaigns:", campaigns['error'])
-                return []
-            elif isinstance(campaigns, list):
+            if isinstance(campaigns, list):
                 return campaigns
-            else:
-                # Some servers might return a single object if you don't have a generic 'list campaigns' route
-                return []
+            # If your server doesn't provide a list route, handle accordingly
+            return []
         else:
             print("Failed to fetch campaigns. Status code:", resp.status_code)
     except Exception as e:
@@ -31,21 +38,21 @@ def list_campaigns(server_url):
     return []
 
 def pick_campaign(server_url):
-    """Let the user pick a campaign from a list or type one in."""
+    """
+    Prompt the user to choose from a list of campaigns or manually enter one.
+    """
     campaigns = list_campaigns(server_url)
     if not campaigns:
-        print("No campaigns found or listing campaigns not supported by the server.")
-        # Let user type a campaign_id manually anyway
-        campaign_id = input("Enter a campaign_id manually (e.g. 1): ").strip()
-        return int(campaign_id)
-    
+        print("No campaigns found or listing not supported.")
+        choice = input("Enter a campaign_id manually: ").strip()
+        return int(choice)
+
     print("\nAvailable Campaigns:")
     for i, c in enumerate(campaigns, start=1):
         print(f"{i}. [ID={c['campaign_id']}] {c['title']}")
-    choice = input("\nEnter the number of a campaign or 'm' to manually enter an ID: ").strip()
+    choice = input("\nEnter number or 'm' to manually enter an ID: ").strip()
     if choice.lower() == 'm':
-        campaign_id = input("Enter campaign_id: ").strip()
-        return int(campaign_id)
+        return int(input("Enter campaign_id: ").strip())
     else:
         try:
             idx = int(choice)
@@ -53,46 +60,48 @@ def pick_campaign(server_url):
                 return campaigns[idx-1]['campaign_id']
         except:
             pass
-    # fallback
     return 1
 
 def list_sessions_in_campaign(server_url, campaign_id):
+    """
+    Retrieve all sessions for a campaign. If it fails, return empty list.
+    """
     try:
         resp = requests.get(f"{server_url}/campaigns/{campaign_id}/sessions")
         resp.raise_for_status()
-        sessions = resp.json()
-        if isinstance(sessions, dict) and 'error' in sessions:
-            print("Error fetching sessions:", sessions['error'])
-            return []
-        return sessions
+        return resp.json()
     except Exception as e:
         print("Error fetching sessions:", e)
         return []
 
 def pick_session(server_url, campaign_id):
+    """
+    Prompt the user to pick an existing session or start a new one.
+    """
     sessions = list_sessions_in_campaign(server_url, campaign_id)
     if not sessions:
         print("\nNo existing sessions found for this campaign.")
         return start_new_session(server_url, campaign_id)
-    
+
     print("\nExisting sessions:")
     for i, s in enumerate(sessions, start=1):
         print(f"{i}. Session {s['session_id']} (Created: {s['created_at']})")
-    
-    choice = input("\nEnter session number to load, or press Enter for new session: ").strip()
-    if choice == "":
+
+    choice = input("\nEnter session number to load, or press Enter for new: ").strip()
+    if not choice:
         return start_new_session(server_url, campaign_id)
-    else:
-        try:
-            idx = int(choice)
-            if 1 <= idx <= len(sessions):
-                return sessions[idx-1]['session_id']
-        except:
-            pass
-    # fallback
+    try:
+        idx = int(choice)
+        if 1 <= idx <= len(sessions):
+            return sessions[idx-1]['session_id']
+    except:
+        pass
     return start_new_session(server_url, campaign_id)
 
 def start_new_session(server_url, campaign_id):
+    """
+    Create a new session on the server for a campaign.
+    """
     print("\nStarting a new session...")
     try:
         resp = requests.post(f"{server_url}/sessions/start", json={"campaign_id": campaign_id})
@@ -103,52 +112,52 @@ def start_new_session(server_url, campaign_id):
         return None
 
 def list_players_in_campaign(server_url, campaign_id):
+    """
+    Retrieve all players in a campaign. Returns empty list on error.
+    """
     try:
         resp = requests.get(f"{server_url}/campaigns/{campaign_id}/players")
         resp.raise_for_status()
-        players = resp.json()
-        if isinstance(players, dict) and 'error' in players:
-            print("Error fetching players:", players['error'])
-            return []
-        return players
+        return resp.json()
     except Exception as e:
         print("Error fetching players:", e)
         return []
 
 def pick_player(server_url, campaign_id):
-    """Let user pick or create a player record in the chosen campaign."""
+    """
+    Prompt user to pick an existing player or create a new one.
+    """
     players = list_players_in_campaign(server_url, campaign_id)
     if not players:
         print("\nNo players found for this campaign.")
         return create_player(server_url, campaign_id)
-    
+
     print("\nExisting Players:")
     for i, p in enumerate(players, start=1):
         print(f"{i}. [ID={p['player_id']}] {p['character_name']} (User: {p['name']})")
-    
-    choice = input("\nEnter the number of a player to select, or press Enter to create new: ").strip()
-    if choice == "":
+
+    choice = input("\nEnter player number or press Enter to create new: ").strip()
+    if not choice:
         return create_player(server_url, campaign_id)
-    else:
-        try:
-            idx = int(choice)
-            if 1 <= idx <= len(players):
-                return players[idx-1]['player_id']
-        except:
-            pass
-    # fallback
+    try:
+        idx = int(choice)
+        if 1 <= idx <= len(players):
+            return players[idx-1]['player_id']
+    except:
+        pass
     return create_player(server_url, campaign_id)
 
 def create_player(server_url, campaign_id):
-    print("\nLet's create a new player record.")
-    name = input("Real user name (e.g., John): ").strip()
-    character_name = input("Character name (e.g., Thorin): ").strip()
-    race = input("Race (e.g., Dwarf): ").strip()
-    char_class = input("Class (e.g., Fighter): ").strip()
+    """
+    Prompt user for player info and create a new record on the server.
+    """
+    print("\nCreate a new player.")
+    name = input("Real user name: ").strip()
+    character_name = input("Character name: ").strip()
+    race = input("Race (e.g. Dwarf): ").strip()
+    char_class = input("Class (e.g. Fighter): ").strip()
     level_input = input("Level (default 1): ").strip()
-    level = 1
-    if level_input.isdigit():
-        level = int(level_input)
+    level = int(level_input) if level_input.isdigit() else 1
 
     data = {
         "name": name,
@@ -158,81 +167,79 @@ def create_player(server_url, campaign_id):
         "level": level
     }
     try:
-        resp = requests.post(
-            f"{server_url}/campaigns/{campaign_id}/players",
-            json=data
-        )
+        resp = requests.post(f"{server_url}/campaigns/{campaign_id}/players", json=data)
         resp.raise_for_status()
         return resp.json()["player_id"]
     except Exception as e:
         print("Error creating player:", e)
         return None
 
-# ----- WEBSOCKET PART -----
+# Create a SocketIO client instance
 sio = socketio.Client()
 
 @sio.event
 def connect():
-    print("Connected to server.")
+    print("Connected to the server via SocketIO.")
 
 @sio.event
 def disconnect():
-    print("Disconnected from server.")
+    print("Disconnected from the server.")
 
 @sio.on('new_message')
 def on_new_message(data):
-    """Whenever the server broadcasts 'new_message', print it."""
+    """
+    Handler for 'new_message' events broadcast by the server.
+    Prints out the message.
+    """
     message = data.get('message', '')
     print(f"\n--- NEW MESSAGE ---\n{message}\n-------------------\n")
-
 
 def main():
     print("Welcome to the D&D AI DM WebSocket Client!\n")
     server_url = choose_server_url()
-    
+
     # 1. Choose a campaign
     campaign_id = pick_campaign(server_url)
-    print(f"\nSelected campaign_id={campaign_id}")
-    
-    # 2. Choose or create session
+    print(f"Selected campaign_id={campaign_id}")
+
+    # 2. Choose a session or create new
     session_id = pick_session(server_url, campaign_id)
+    if not session_id:
+        print("No valid session. Exiting.")
+        return
     print(f"Using session_id={session_id}")
-    
-    # 3. Choose or create player
+
+    # 3. Choose or create a player
     player_id = pick_player(server_url, campaign_id)
-    print(f"Playing as player_id={player_id}\n")
-    
-    # 4. We also need to pick a world_id, if your code associates the campaign with a single world
-    #    You might already have it from the campaign details. Let's assume we do a quick GET /campaigns/<id>.
+    print(f"Playing as player_id={player_id}")
+
+    # 4. Retrieve campaign details to find the world_id
     try:
         resp = requests.get(f"{server_url}/campaigns/{campaign_id}")
         resp.raise_for_status()
         campaign_obj = resp.json()
         world_id = campaign_obj.get('world_id', 1)
     except Exception as e:
-        print("Could not fetch campaign details, defaulting to world_id=1:", e)
+        print(f"Could not fetch campaign details, defaulting to world_id=1: {e}")
         world_id = 1
-    
-    # 5. Connect via WebSocket
+
+    # 5. Connect to the server
     print(f"\nConnecting to {server_url} via WebSocket...")
-    sio.connect(server_url, transports=['websocket'])  # Force WebSocket if you like
-    
+    sio.connect(server_url, transports=['websocket'])
+
     # 6. Join the session room
     sio.emit('join_session', {'session_id': session_id})
-    
+
     print(f"\nAll set! You are player_id={player_id} in session_id={session_id}, campaign_id={campaign_id}, world_id={world_id}.")
     print("Type 'quit' or Ctrl+C to exit.\n")
-    
+
     # 7. Main chat loop
     while True:
         try:
-            user_input = input("You: ")
+            user_input = input("You: ").strip()
             if user_input.lower() == 'quit':
                 break
-            
-            # Send the message to the server
-            # This will invoke the AI logic on the server if set up in @socketio.on('send_message')
-            # Make sure your server code expects these fields: session_id, campaign_id, world_id, player_id, message
+
             sio.emit('send_message', {
                 'session_id': session_id,
                 'campaign_id': campaign_id,
@@ -242,7 +249,10 @@ def main():
             })
         except KeyboardInterrupt:
             break
-    
+        except Exception as e:
+            print(f"Error: {e}")
+            break
+
     print("Closing connection...")
     sio.disconnect()
 

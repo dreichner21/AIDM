@@ -1,66 +1,94 @@
-import os
-import google.generativeai as genai
-from dotenv import load_dotenv
+"""
+llm.py
 
-# Load environment variables
+Module to handle all interactions with the Large Language Model (LLM).
+Uses Google Generative AI (Gemini) in this example.
+"""
+
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+
+# Load environment variables from .env if present
 load_dotenv()
 
-# Initialize Gemini API
-genai.configure(api_key="AIzaSyBvsMef-geqcJJDof6hZitpLWSUxhiR1Ds")
+# Configure the Gemini / Google Generative AI client
+# Note: In production, do not hardcode API keys! Use environment variables.
+api_key = os.getenv("GOOGLE_GENAI_API_KEY", "AIzaSyBvsMef-geqcJJDof6hZitpLWSUxhiR1Ds")
+genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
-def query_gpt(prompt, system_message=None, model_name="gemini-2.0-flash-exp"):
+def query_gpt(prompt, system_message=None):
     """
-    Send a conversation to the Gemini API and return the assistant's response.
+    Send user input to Gemini, optionally including a system_message for context,
+    and return the AI's textual response.
+
     Args:
-        prompt (str): The user's input
-        system_message (str, optional): Context/instructions for the AI
-        model_name (str): The model to use (ignored as we're using gemini-2.0-flash-exp)
+        prompt (str): The user's message or query.
+        system_message (str, optional): Additional instructions or context.
+
     Returns:
-        str: The AI's response
+        str: AI-generated response from the model.
     """
-    # Combine system message and prompt if provided
-    full_prompt = f"{system_message}\n\n{prompt}" if system_message else prompt
-    
-    # Generate response
+    if system_message:
+        full_prompt = f"{system_message}\n\n{prompt}"
+    else:
+        full_prompt = prompt
+
     response = model.generate_content(full_prompt)
     return response.text
 
 def build_dm_context(world_id, campaign_id, session_id=None):
-    from models import get_world_by_id, get_campaign_by_id, get_players_in_campaign, get_session
+    """
+    Build a textual context string from the current game data:
+      - World description
+      - Campaign description
+      - Player summaries
+      - Recent events in the session log (if session_id is provided).
+
+    This context is used to give the LLM better situational awareness.
+    """
+    from ai_dm.models import get_world_by_id, get_campaign_by_id, get_players_in_campaign, get_session
     
-    # 1) World details
+    # World details
     world = get_world_by_id(world_id)
-    world_summary = f"World: {world['name']}\nDescription: {world['description']}"
-    
-    # 2) Campaign details
+    if not world:
+        world_summary = "World: Unknown\nDescription: No data."
+    else:
+        world_summary = f"World: {world['name']}\nDescription: {world['description']}"
+
+    # Campaign details
     campaign = get_campaign_by_id(campaign_id)
-    campaign_summary = f"Campaign: {campaign['title']}\nDescription: {campaign['description']}"
-    
-    # 3) Player information
+    if not campaign:
+        campaign_summary = "Campaign: Unknown\nDescription: No data."
+    else:
+        campaign_summary = f"Campaign: {campaign['title']}\nDescription: {campaign['description']}"
+
+    # Player summaries
     players = get_players_in_campaign(campaign_id)
-    player_summaries = []
+    player_lines = []
     for i, player in enumerate(players, start=1):
-        # Build a descriptive line for each player
-        char_name = player['character_name'] or f"Unnamed-Char-{player['player_id']}"
-        race = player['race'] or "Unknown Race"
-        char_class = player['class'] or "Unknown Class"
-        level = player['level'] or 1
-        
-        line = (f"Player #{i} [ID: {player['player_id']}]: "
-                f"{char_name}, a Level {level} {race} {char_class}")
-        player_summaries.append(line)
-    
-    players_text = "Party Members:\n" + "\n".join(player_summaries)
-    
-    # 4) Recent events (session log)
+        char_name = player.get('character_name') or f"Unnamed-Char-{player['player_id']}"
+        race = player.get('race') or "Unknown Race"
+        char_class = player.get('class') or "Unknown Class"
+        level = player.get('level', 1)
+
+        line = (f"Player #{i} [ID {player['player_id']}]: "
+                f"{char_name}, Level {level} {race} {char_class}")
+        player_lines.append(line)
+    if player_lines:
+        players_text = "Party Members:\n" + "\n".join(player_lines)
+    else:
+        players_text = "No players found in this campaign."
+
+    # Recent session events
     recent_events = ""
     if session_id:
         session = get_session(session_id)
-        if session and session['session_log']:
+        if session and session.get('session_log'):
             recent_events = f"\nRecent Events:\n{session['session_log']}"
-    
-    # 5) Combine everything
+
+    # Combine all context
     context = (
         f"{world_summary}\n\n{campaign_summary}\n\n{players_text}"
         f"{recent_events}"
