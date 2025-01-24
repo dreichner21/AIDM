@@ -17,6 +17,7 @@ fully refactored to use function calling with Gemini 2.0 for DM responses.
 
 import json
 from datetime import datetime
+import logging
 
 # Import database first to avoid circular imports
 from ai_dm.database import db, migrate, init_db
@@ -363,9 +364,10 @@ def process_action():
             })
 
     except Exception as e:
+        logging.error("An error occurred: %s", str(e))
         return jsonify({
             "success": False,
-            "message": str(e)
+            "message": "An internal error has occurred."
         }), 500
 
 def handle_roll_request(response_json):
