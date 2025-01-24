@@ -1,8 +1,15 @@
 import os
+import sys
 import shutil
 import platform
 import json
 from pathlib import Path
+
+# Add parent directory to Python path if running as script
+if __name__ == "__main__":
+    parent_dir = Path(__file__).parent.parent
+    if str(parent_dir) not in sys.path:
+        sys.path.append(str(parent_dir))
 
 FONT_FILES = [
     "MedievalSharp-Regular.ttf",
@@ -65,7 +72,7 @@ def install_fonts():
     
     return installed
 
-if __name__ == "__main__":
+def main():
     print("=== Medieval Font Installer ===")
     try:
         if check_first_run():
@@ -77,3 +84,6 @@ if __name__ == "__main__":
             print("Fonts already installed previously")
     except Exception as e:
         print(f"Error: {str(e)}")
+
+if __name__ == "__main__":
+    main()

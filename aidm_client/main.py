@@ -35,6 +35,13 @@ from PySide6.QtGui import QFontDatabase
 from pathlib import Path
 import subprocess
 
+# Add the client directory to Python path for local imports
+current_dir = Path(__file__).parent
+if str(current_dir) not in sys.path:
+    sys.path.append(str(current_dir))
+
+from install_fonts import check_first_run, mark_first_run_complete
+
 class AIDMWizardApp(QMainWindow):
     """
     Main application window that manages a QStackedWidget of pages:
@@ -49,8 +56,9 @@ class AIDMWizardApp(QMainWindow):
         self.setWindowTitle("AI-DM Wizard (SocketIO)")
         self.setMinimumSize(880, 640)
 
-        if self.check_first_run():
+        if check_first_run():
             self.run_first_time_setup()
+            mark_first_run_complete()
             
         self.load_embedded_fonts()
 
@@ -300,7 +308,7 @@ class CampaignPage(BasePage):
 
     def load_campaigns(self):
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/campaigns"
+        url = f"{base_url}/api/campaigns"  # Add /api/ prefix
         try:
             resp = requests.get(url, timeout=5)
             resp.raise_for_status()
@@ -336,7 +344,7 @@ class CampaignPage(BasePage):
         self.controller.campaign_id = int(cid_str)
         # Fetch campaign detail to get world_id
         base_url = self.controller.server_url.rstrip("/")
-        c_url = f"{base_url}/campaigns/{self.controller.campaign_id}"
+        c_url = f"{base_url}/api/campaigns/{self.controller.campaign_id}"  # Add /api/ prefix
         try:
             r = requests.get(c_url, timeout=5)
             r.raise_for_status()
@@ -372,7 +380,7 @@ class CampaignCreateDialog(QDialog):
 
     def do_create(self):
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/campaigns"
+        url = f"{base_url}/api/campaigns"  # Add /api/ prefix
         data = {
             "title": self.title_edit.text().strip(),
             "description": self.desc_edit.text().strip(),
@@ -441,7 +449,7 @@ class SessionPage(BasePage):
             QMessageBox.critical(self, "Error", "No campaign selected.")
             return
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/campaigns/{self.controller.campaign_id}/sessions"
+        url = f"{base_url}/api/sessions/campaigns/{self.controller.campaign_id}/sessions"
         try:
             resp = requests.get(url, timeout=5)
             resp.raise_for_status()
@@ -460,7 +468,7 @@ class SessionPage(BasePage):
 
     def create_session(self):
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/sessions/start"
+        url = f"{base_url}/sessions/start"  # Remove /api/
         data = {"campaign_id": self.controller.campaign_id}
         try:
             resp = requests.post(url, json=data, timeout=5)
@@ -535,7 +543,7 @@ class PlayerPage(BasePage):
             QMessageBox.critical(self, "Error", "No campaign selected.")
             return
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/campaigns/{self.controller.campaign_id}/players"
+        url = f"{base_url}/api/players/campaigns/{self.controller.campaign_id}/players"
         try:
             resp = requests.get(url, timeout=5)
             resp.raise_for_status()
@@ -599,7 +607,7 @@ class PlayerCreateDialog(QDialog):
 
     def do_create(self):
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/campaigns/{self.controller.campaign_id}/players"
+        url = f"{base_url}/api/campaigns/{self.controller.campaign_id}/players"
         data = {
             "name": self.name_edit.text().strip(),
             "character_name": self.char_name_edit.text().strip(),

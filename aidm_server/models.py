@@ -1,5 +1,6 @@
+from aidm_server.database import db  # Changed from ai_dm.database
 from datetime import datetime
-from ai_dm.database import db
+import json
 
 class World(db.Model):
     __tablename__ = 'worlds'

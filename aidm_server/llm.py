@@ -8,10 +8,10 @@ import os
 import json
 from dotenv import load_dotenv
 import google.generativeai as genai
-from ai_dm.models_orm import World, Campaign, Player, Session
+from aidm_server.models import World, Campaign, Player, Session  # Changed from ai_dm.models_orm
 from datetime import datetime
 from sqlalchemy import desc
-from ai_dm.models_orm import World, Campaign, Player, Session, PlayerAction
+from aidm_server.models import World, Campaign, Player, Session, PlayerAction
 
 # Load environment variables
 load_dotenv()
