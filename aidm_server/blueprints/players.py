@@ -1,6 +1,7 @@
 # players.py
 
 from flask import Blueprint, request, jsonify
+import logging
 from aidm_server.database import db
 from aidm_server.models import Player, Campaign
 
@@ -37,7 +38,8 @@ def add_player(campaign_id):
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Failed to create player", "details": str(e)}), 400
+        logging.error("Failed to create player: %s", str(e))
+        return jsonify({"error": "Failed to create player"}), 400
 
 def get_players(campaign_id):
     players = Player.query.filter_by(campaign_id=campaign_id).all()
