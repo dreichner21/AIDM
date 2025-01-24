@@ -52,12 +52,12 @@ You can run the Flask-based server on your machine and optionally expose it to o
 ## Architecture
 
 ```
-                               app.py
+                        aidm_client/main.py
                      +-------------------------+
                      |      PySide6 GUI        |
                      | (Desktop Application)   |
                      +-----------↑↓-----------+
-                              server.py
+                        aidm_server/main.py
                        Socket.IO/WebSockets
                      +-----------↑↓-----------+
                      |    Flask/WS Server      |
@@ -94,34 +94,44 @@ You can run the Flask-based server on your machine and optionally expose it to o
 ## Directory Structure
 
 ```
-AI-DM/
-├── ai_dm
-│   ├── database.py         # Database initialization (Flask-SQLAlchemy, migrations)
-│   ├── llm.py              # Core LLM (Gemini) integration and DM function-calling logic
-│   ├── models_orm.py       # SQLAlchemy ORM models (World, Campaign, Player, Session, etc.)
-│   └── server.py           # Main Flask + SocketIO server with routes, streaming chat
+AIDM/
+├── aidm_client
+│   ├── main.py            # PySide6 GUI (entry point for the client)
+│   └── install_fonts.py   # Installs custom fonts on first run
+├── aidm_server
+│   ├── __init__.py
+│   ├── main.py            # Flask + Socket.IO server (entry point for the server)
+│   ├── database.py
+│   ├── llm.py
+│   ├── models.py
+│   ├── blueprints
+│   │   ├──__init__.py
+│   │   ├── admin.py
+│   │   ├── campaigns.py
+│   │   ├── players.py
+│   │   ├── sessions.py
+│   │   ├── socketio_events.py
+│   │   └── worlds.py
 ├── assets
-│   ├── fonts
-│   │   ├── MedievalSharp-Regular.ttf
-│   │   └── UnifrakturMaguntia-Regular.ttf
-│   └── background.jpg      # Background image for the PySide6 GUI
-├── scripts
-│   ├── app.py              # PySide6 Wizard GUI for connecting and playing
-│   └── install_fonts.py    # Installs custom fantasy fonts on first run
-├── README.md               # This README
-└── requirements.txt        # Required Python dependencies
+│   ├── background.jpg
+│   └── fonts
+│       ├── MedievalSharp-Regular.ttf
+│       └── UnifrakturMaguntia-Regular.ttf
+├── requirements.txt
+└── README.md
+
 ```
 
 ---
 
 ## Detailed File Walkthrough
 
-### `ai_dm/database.py`
+### `aidmn_server/database.py`
 - Configures **Flask-SQLAlchemy** and Alembic migrations.
 - Initializes the SQLite database in `ai_dm/instance/dnd_ai_dm.db`.
 - Provides a function `init_db(app)` used by `server.py` to attach the DB to the Flask app.
 
-### `ai_dm/llm.py`
+### `aidm_server/llm.py`
 - **Core LLM integration** with Google’s Generative AI (Gemini).
 - Contains advanced logic for:
   - Function-calling prompt: specifying how the DM should respond in JSON (with `roll_request`, `speaking_player`, etc.).
@@ -129,19 +139,19 @@ AI-DM/
   - Handling streaming text (`query_dm_function_stream`) if you want chunked responses for a more immersive feel.
   - Building context from the database (world, campaign, recent player actions) to keep the AI’s replies consistent.
 
-### `ai_dm/models_orm.py`
+### `aidm_server/models.py`
 - **SQLAlchemy model definitions** for:
   - `World`, `Campaign`, `Player`, `Session`, `Npc`, `PlayerAction`, etc.
 - Each class maps to a database table in SQLite.
 
-### `ai_dm/server.py`
+### `aidm_server/main.py`
 - The **main Flask + SocketIO server** file:
   - **REST endpoints** for managing worlds, campaigns, players, sessions, etc.
   - **Socket.IO event handlers** to handle real-time chat messages, roll requests, and streaming DM responses.
   - Uses `init_db(app)` to create or migrate the database.
   - Contains an admin setup using `flask_admin` with custom forms and validation.
 
-### `scripts/app.py`
+### `aidm_client/main.py`
 - A **PySide6** desktop application that:
   - Opens a multi-page “wizard” to:
     1. Specify the server URL.
@@ -151,7 +161,7 @@ AI-DM/
     5. Enter the real-time chat screen, bridging Socket.IO to the AI DM.
   - Installs fonts if needed (`install_fonts.py`) on first run.
 
-### `scripts/install_fonts.py`
+### `aidm_client/install_fonts.py`
 - Installs custom medieval-style fonts (e.g., *MedievalSharp*, *UnifrakturMaguntia*) into your system’s font directory.
 - Called automatically on the first run of the PySide6 wizard.
 
@@ -201,17 +211,17 @@ FLASK_SECRET_KEY=<SOME_RANDOM_SECRET_KEY>
 
 ### Running the Server
 
-1. **Navigate** into the `ai_dm/` folder (or stay in root; either is fine):
+1. **Navigate** into the `aidm_server/` folder (or stay in root; either is fine):
    ```bash
-   cd ai_dm
+   cd aidm_server
    ```
 2. **Run the Flask server** (which also starts Socket.IO):
    ```bash
-   # From ai_dm folder:
-   python server.py
+   # From aidm_server folder:
+   python main.py
    
    # OR from project root:
-   python -m ai_dm.server
+   python -m aidm_server.main
    ```
 3. By default, the server runs on `http://localhost:5000`. 
 
@@ -223,7 +233,11 @@ FLASK_SECRET_KEY=<SOME_RANDOM_SECRET_KEY>
 In a **separate** terminal (with the same virtual environment active if you wish), run:
 
 ```bash
-python scripts/app.py
+# From aidmn_client folder:
+python main.py
+
+# OR from project root:
+python -m aidm_client.main
 ```
 
 This **Qt** window will guide you through:
