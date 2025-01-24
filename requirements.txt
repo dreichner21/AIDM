@@ -14,7 +14,7 @@ flask-admin==1.6.1
 flask_sqlalchemy==3.1.1
 font-manager==0.3.0
 pillow
-flask-cors==4.0.0
+flask-cors==4.0.2
 PySide
 websocket-client
 appdirs==1.4.4
