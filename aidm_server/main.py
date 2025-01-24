@@ -4,6 +4,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import logging
 
 # Update imports to use aidm_server package
 from aidm_server.database import db, init_db
@@ -15,6 +16,12 @@ from aidm_server.blueprints.socketio_events import register_socketio_events
 from aidm_server.blueprints.admin import configure_admin
 
 def create_app():
+    """
+    Create and configure the Flask application.
+
+    Returns:
+        Flask: The configured Flask application instance.
+    """
     app = Flask(__name__)
     CORS(app)
     app.secret_key = os.getenv("FLASK_SECRET_KEY") or "my_dev_secret"
@@ -38,6 +45,15 @@ register_socketio_events(socketio)
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        try:
+            db.create_all()
+            logging.info("Database tables created successfully.")
+        except Exception as e:
+            logging.error(f"Error creating database tables: {str(e)}")
+            raise
     # Running directly via Python
-    socketio.run(app, debug=True, port=5000, allow_unsafe_werkzeug=True)
+    try:
+        socketio.run(app, debug=True, port=5000, allow_unsafe_werkzeug=True)
+    except Exception as e:
+        logging.error(f"Error running the server: {str(e)}")
+        raise

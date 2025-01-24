@@ -10,6 +10,10 @@ from aidm_server.database import db
 from aidm_server.models import World, Campaign, Player, Session, Npc, PlayerAction
 
 class PlayerModelView(ModelView):
+    """
+    Custom ModelView for the Player model in Flask-Admin.
+    Provides form customization and validation for Player objects.
+    """
     form_columns = (
         'campaign_id', 'name', 'character_name', 'race', 'class_',
         'level', 'stats', 'inventory', 'character_sheet'
@@ -20,6 +24,10 @@ class PlayerModelView(ModelView):
     )
 
     def create_form(self):
+        """
+        Customize the form for creating a new Player.
+        Adds select fields for race and class with predefined choices.
+        """
         form = super(PlayerModelView, self).create_form()
         form.race = Select2Field('Race', choices=[
             ('', 'Select Race'),
@@ -71,6 +79,10 @@ class PlayerModelView(ModelView):
     }
 
     def on_model_change(self, form, model, is_created):
+        """
+        Hook to perform actions when a Player model is created or updated.
+        Ensures default values for stats, inventory, character_sheet, and level.
+        """
         if is_created:
             if not model.stats:
                 model.stats = '{}'
@@ -82,10 +94,18 @@ class PlayerModelView(ModelView):
                 model.level = 1
 
 class NpcModelView(ModelView):
+    """
+    Custom ModelView for the Npc model in Flask-Admin.
+    Provides form customization and validation for Npc objects.
+    """
     form_columns = ('world_id', 'name', 'role', 'backstory')
     column_list = ('world_id', 'name', 'role')
     
     def create_form(self):
+        """
+        Customize the form for creating a new Npc.
+        Adds a select field for role with predefined choices.
+        """
         form = super(NpcModelView, self).create_form()
         form.role = Select2Field('Role', choices=[
             ('', 'Select Role'),
@@ -118,10 +138,18 @@ class NpcModelView(ModelView):
     }
 
     def on_model_change(self, form, model, is_created):
+        """
+        Hook to perform actions when an Npc model is created or updated.
+        Ensures a default value for backstory if not provided.
+        """
         if is_created and not model.backstory:
             model.backstory = ''
 
 class CampaignModelView(ModelView):
+    """
+    Custom ModelView for the Campaign model in Flask-Admin.
+    Provides form customization and validation for Campaign objects.
+    """
     form_columns = (
         'title', 'description', 'world_id', 'current_quest',
         'location', 'plot_points', 'active_npcs'
@@ -129,6 +157,10 @@ class CampaignModelView(ModelView):
     column_list = ('title', 'world_id', 'current_quest', 'location')
     
     def on_model_change(self, form, model, is_created):
+        """
+        Hook to perform actions when a Campaign model is created or updated.
+        Ensures default values for plot_points, active_npcs, current_quest, and location.
+        """
         if is_created:
             if not model.plot_points:
                 model.plot_points = '[]'
@@ -140,6 +172,16 @@ class CampaignModelView(ModelView):
                 model.location = ''
 
 def configure_admin(app, db):
+    """
+    Configure Flask-Admin for the application.
+    
+    Args:
+        app (Flask): The Flask application instance.
+        db (SQLAlchemy): The SQLAlchemy database instance.
+    
+    Returns:
+        Admin: The configured Flask-Admin instance.
+    """
     admin = Admin(app, name="AI-DM Admin", template_mode="bootstrap3")
     admin.add_view(ModelView(World, db.session))
     admin.add_view(CampaignModelView(Campaign, db.session))

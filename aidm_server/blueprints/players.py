@@ -7,14 +7,32 @@ from aidm_server.models import Player, Campaign
 
 players_bp = Blueprint("players", __name__)
 
-@players_bp.route('/campaigns/<int:campaign_id>/players', methods=['GET', 'POST'])  # no trailing slash
+@players_bp.route('/campaigns/<int:campaign_id>/players', methods=['GET', 'POST'])
 def handle_players(campaign_id):
+    """
+    Handle player-related operations for a specific campaign.
+
+    Args:
+        campaign_id (int): The ID of the campaign.
+
+    Returns:
+        JSON response with player data or status message.
+    """
     if request.method == 'POST':
         return add_player(campaign_id)
     else:
         return get_players(campaign_id)
 
 def add_player(campaign_id):
+    """
+    Add a new player to a campaign.
+
+    Args:
+        campaign_id (int): The ID of the campaign.
+
+    Returns:
+        JSON response with the new player's ID and status message.
+    """
     data = request.json
 
     campaign = db.session.get(Campaign, campaign_id)
@@ -42,16 +60,29 @@ def add_player(campaign_id):
         return jsonify({"error": "Failed to create player"}), 400
 
 def get_players(campaign_id):
-    players = Player.query.filter_by(campaign_id=campaign_id).all()
-    results = []
-    for p in players:
-        results.append({
-            "player_id": p.player_id,
-            "campaign_id": p.campaign_id,
-            "name": p.name,
-            "character_name": p.character_name,
-            "race": p.race,
-            "class_": p.class_,
-            "level": p.level
-        })
-    return jsonify(results)
+    """
+    Get all players in a specific campaign.
+
+    Args:
+        campaign_id (int): The ID of the campaign.
+
+    Returns:
+        JSON response with a list of players.
+    """
+    try:
+        players = Player.query.filter_by(campaign_id=campaign_id).all()
+        results = []
+        for p in players:
+            results.append({
+                "player_id": p.player_id,
+                "campaign_id": p.campaign_id,
+                "name": p.name,
+                "character_name": p.character_name,
+                "race": p.race,
+                "class_": p.class_,
+                "level": p.level
+            })
+        return jsonify(results)
+    except Exception as e:
+        logging.error("Failed to get players: %s", str(e))
+        return jsonify({"error": "Failed to get players"}), 400
