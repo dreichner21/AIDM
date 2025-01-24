@@ -37,7 +37,8 @@ def add_player(campaign_id):
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Failed to create player", "details": str(e)}), 400
+        app.logger.error(f"Failed to create player: {str(e)}")
+        return jsonify({"error": "Failed to create player"}), 400
 
 def get_players(campaign_id):
     players = Player.query.filter_by(campaign_id=campaign_id).all()
