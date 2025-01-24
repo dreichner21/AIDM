@@ -228,6 +228,9 @@ class BasePage(QWidget):
 ##############################################################################
 
 class ServerPage(BasePage):
+    """
+    Page to connect to the AI-DM server.
+    """
     def __init__(self, parent):
         super().__init__(parent, title="1. Connect to AI-DM Server")
 
@@ -253,6 +256,9 @@ class ServerPage(BasePage):
         self.content_layout.addStretch()
 
     def next_step(self):
+        """
+        Proceed to the next step after validating the server URL.
+        """
         url = self.server_edit.text().strip()
         if not url:
             QMessageBox.critical(self, "Error", "Server URL cannot be empty.")
@@ -266,6 +272,9 @@ class ServerPage(BasePage):
 ##############################################################################
 
 class CampaignPage(BasePage):
+    """
+    Page to choose or create a campaign.
+    """
     def __init__(self, parent):
         super().__init__(parent, title="2. Choose or Create a Campaign")
 
@@ -304,9 +313,15 @@ class CampaignPage(BasePage):
         self.content_layout.addStretch()
 
     def on_enter(self):
+        """
+        Load campaigns when the page is entered.
+        """
         self.load_campaigns()
 
     def load_campaigns(self):
+        """
+        Load campaigns from the server.
+        """
         base_url = self.controller.server_url.rstrip("/")
         url = f"{base_url}/api/campaigns"  # Add /api/ prefix
         try:
@@ -326,12 +341,18 @@ class CampaignPage(BasePage):
             QMessageBox.critical(self, "Error", f"Failed to load campaigns:\n{e}")
 
     def create_campaign_prompt(self):
+        """
+        Prompt to create a new campaign.
+        """
         dialog = CampaignCreateDialog(self.controller)
         if dialog.exec() == QDialog.Accepted:
             QMessageBox.information(self, "Success", "Campaign created.")
             self.load_campaigns()
 
     def next_step(self):
+        """
+        Proceed to the next step after selecting a campaign.
+        """
         choice = self.campaign_combo.currentText().strip()
         if not choice:
             QMessageBox.information(self, "Info", "Select or create a campaign first.")
@@ -357,6 +378,9 @@ class CampaignPage(BasePage):
 
 
 class CampaignCreateDialog(QDialog):
+    """
+    Dialog to create a new campaign.
+    """
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
@@ -379,6 +403,9 @@ class CampaignCreateDialog(QDialog):
         layout.addWidget(btn_box)
 
     def do_create(self):
+        """
+        Create a new campaign on the server.
+        """
         base_url = self.controller.server_url.rstrip("/")
         url = f"{base_url}/api/campaigns"  # Add /api/ prefix
         data = {
@@ -404,6 +431,9 @@ class CampaignCreateDialog(QDialog):
 ##############################################################################
 
 class SessionPage(BasePage):
+    """
+    Page to choose or create a session.
+    """
     def __init__(self, parent):
         super().__init__(parent, title="3. Choose or Create a Session")
 
@@ -442,9 +472,15 @@ class SessionPage(BasePage):
         self.content_layout.addStretch()
 
     def on_enter(self):
+        """
+        Load sessions when the page is entered.
+        """
         self.load_sessions()
 
     def load_sessions(self):
+        """
+        Load sessions from the server.
+        """
         if not self.controller.campaign_id:
             QMessageBox.critical(self, "Error", "No campaign selected.")
             return
@@ -467,6 +503,9 @@ class SessionPage(BasePage):
             QMessageBox.critical(self, "Error", f"Failed to load sessions:\n{e}")
 
     def create_session(self):
+        """
+        Create a new session on the server.
+        """
         base_url = self.controller.server_url.rstrip("/")
         url = f"{base_url}/sessions/start"  # Remove /api/
         data = {"campaign_id": self.controller.campaign_id}
@@ -482,6 +521,9 @@ class SessionPage(BasePage):
             QMessageBox.critical(self, "Error", f"Failed to create session:\n{e}")
 
     def next_step(self):
+        """
+        Proceed to the next step after selecting a session.
+        """
         choice = self.session_combo.currentText().strip()
         if not choice:
             QMessageBox.information(self, "Info", "Select or create a session first.")
@@ -498,6 +540,9 @@ class SessionPage(BasePage):
 ##############################################################################
 
 class PlayerPage(BasePage):
+    """
+    Page to choose or create a player.
+    """
     def __init__(self, parent):
         super().__init__(parent, title="4. Choose or Create a Player")
 
@@ -536,9 +581,15 @@ class PlayerPage(BasePage):
         self.content_layout.addStretch()
 
     def on_enter(self):
+        """
+        Load players when the page is entered.
+        """
         self.load_players()
 
     def load_players(self):
+        """
+        Load players from the server.
+        """
         if not self.controller.campaign_id:
             QMessageBox.critical(self, "Error", "No campaign selected.")
             return
@@ -562,12 +613,18 @@ class PlayerPage(BasePage):
             QMessageBox.critical(self, "Error", f"Failed to load players:\n{e}")
 
     def create_player_prompt(self):
+        """
+        Prompt to create a new player.
+        """
         dialog = PlayerCreateDialog(self.controller)
         if dialog.exec() == QDialog.Accepted:
             QMessageBox.information(self, "Success", "Player created.")
             self.load_players()
 
     def next_step(self):
+        """
+        Proceed to the next step after selecting a player.
+        """
         choice = self.player_combo.currentText().strip()
         if not choice:
             QMessageBox.information(self, "Info", "Select or create a player first.")
@@ -580,6 +637,9 @@ class PlayerPage(BasePage):
 
 
 class PlayerCreateDialog(QDialog):
+    """
+    Dialog to create a new player.
+    """
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
@@ -606,6 +666,9 @@ class PlayerCreateDialog(QDialog):
         layout.addWidget(btn_box)
 
     def do_create(self):
+        """
+        Create a new player on the server.
+        """
         base_url = self.controller.server_url.rstrip("/")
         url = f"{base_url}/api/campaigns/{self.controller.campaign_id}/players"
         data = {
@@ -899,6 +962,9 @@ class ChatPage(BasePage):
             self.msg_queue.put(display_text)
 
     def on_enter(self):
+        """
+        Connect to the SocketIO server when the page is entered.
+        """
         # Connect socket if not connected
         if not self.sio.connected:
             server_url = self.controller.server_url.strip()
@@ -915,6 +981,9 @@ class ChatPage(BasePage):
                 self.log(f"Error connecting to SocketIO server:\n{e}")
 
     def poll_queue(self):
+        """
+        Poll the message queue for new messages.
+        """
         try:
             while True:
                 text = self.msg_queue.get_nowait()
@@ -923,11 +992,15 @@ class ChatPage(BasePage):
             pass
 
     def log(self, text):
-        """Use the signal system for logging too"""
+        """
+        Log a message to the chat display.
+        """
         self.update_chat_signal.emit(text + "\n")
 
     def update_chat_display(self, text):
-        """Improved chat display update handling"""
+        """
+        Update the chat display with new text.
+        """
         cursor = self.chat_display.textCursor()
         cursor.movePosition(QTextCursor.End)
         
@@ -946,6 +1019,9 @@ class ChatPage(BasePage):
             self.chat_display.ensureCursorVisible()
 
     def send_message(self):
+        """
+        Send a message to the server.
+        """
         msg = self.input_line.text().strip()
         if not msg:
             return
@@ -986,6 +1062,9 @@ class ChatPage(BasePage):
         self.sio.emit('send_message', payload)
 
     def end_session(self):
+        """
+        End the current session.
+        """
         if not self.controller.session_id:
             self.msg_queue.put("No session to end.")
             return
@@ -1004,6 +1083,9 @@ class ChatPage(BasePage):
             self.msg_queue.put(f"Error ending session:\n{e}")
 
     def roll_die(self):
+        """
+        Roll a die and display the result.
+        """
         die_type = self.dice_combo.currentText()
         if not die_type.startswith("d"):
             return
@@ -1015,7 +1097,9 @@ class ChatPage(BasePage):
         self.msg_queue.put(f"{emoji} Roll {die_type}: {result}")
 
     def closeEvent(self, event: QtGui.QCloseEvent):
-        """Clean up SocketIO on close if needed."""
+        """
+        Clean up SocketIO on close if needed.
+        """
         if self.sio and self.sio.connected:
             self.sio.disconnect()
         super().closeEvent(event)
@@ -1026,6 +1110,9 @@ class ChatPage(BasePage):
 ##############################################################################
 
 def main():
+    """
+    Main entry point for the application.
+    """
     app = QtWidgets.QApplication(sys.argv)
     window = AIDMWizardApp()
     window.show()
