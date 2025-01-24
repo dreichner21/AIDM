@@ -14,6 +14,16 @@ def register_socketio_events(socketio):
 
     @socketio.on('join_session')
     def handle_join_session(data):
+        """
+        Handle a client joining a session.
+
+        Args:
+            data (dict): The data containing the session ID.
+
+        Emits:
+            error: If the session ID is missing.
+            new_message: When a new player joins the session.
+        """
         session_id = data.get('session_id')
         if not session_id:
             emit('error', {'message': 'Session ID is required to join.'})
@@ -25,6 +35,21 @@ def register_socketio_events(socketio):
 
     @socketio.on('send_message')
     def handle_send_message(data):
+        """
+        Handle a client sending a message.
+
+        Args:
+            data (dict): The data containing session, campaign, world, player IDs, and the message.
+
+        Emits:
+            error: If required data is missing or invalid.
+            new_message: When a new message is sent by a player.
+            dm_response_start: When the DM response starts.
+            dm_chunk: When a chunk of the DM response is received.
+            dm_response_end: When the DM response ends.
+            roll_request: When a roll is required for an action.
+            session_log_update: When the session log is updated.
+        """
         required_fields = ['session_id', 'campaign_id', 'world_id', 'message', 'player_id']
         if not all(data.get(field) for field in required_fields):
             emit('error', {
