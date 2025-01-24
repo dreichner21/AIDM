@@ -18,7 +18,11 @@ migrate = Migrate()
 
 def init_db(app):
     """Initialize database with specific engine configuration"""
-    database_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance', 'dnd_ai_dm.db')
+    # Create instance directory if it doesn't exist
+    instance_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance')
+    os.makedirs(instance_path, exist_ok=True)
+    
+    database_path = os.path.join(instance_path, 'dnd_ai_dm.db')
     database_uri = f'sqlite:///{database_path}'
     
     app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
@@ -33,3 +37,8 @@ def init_db(app):
     
     db.init_app(app)
     migrate.init_app(app, db, render_as_batch=True)
+    
+    # Create database file if it doesn't exist
+    if not os.path.exists(database_path):
+        with app.app_context():
+            db.create_all()

@@ -225,8 +225,8 @@ class ServerPage(BasePage):
 
         self.server_edit = QLineEdit(self)
         self.server_edit.setFont(INPUT_FONT)
-        # IMPORTANT: Use the same URL you had in the Tkinter code
-        self.server_edit.setText("https://relative-gannet-loyal.ngrok-free.app")  
+        # IMPORTANT: Set the default server URL here
+        self.server_edit.setText("http://localhost:5000")  
 
         self.button_next = QPushButton("Next")
         self.button_next.setFont(BUTTON_FONT)
