@@ -207,7 +207,11 @@ FLASK_SECRET_KEY=<SOME_RANDOM_SECRET_KEY>
    ```
 2. **Run the Flask server** (which also starts Socket.IO):
    ```bash
+   # From ai_dm folder:
    python server.py
+   
+   # OR from project root
+   python -m ai_dm.server
    ```
 3. By default, the server runs on `http://localhost:5000`. 
 
