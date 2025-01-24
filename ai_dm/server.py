@@ -18,6 +18,7 @@ fully refactored to use function calling with Gemini 2.0 for DM responses.
 import json
 from datetime import datetime
 import logging
+import traceback
 
 # Import database first to avoid circular imports
 from ai_dm.database import db, migrate, init_db
@@ -153,9 +154,9 @@ def add_player(campaign_id):
         }), 201
     except Exception as e:
         db.session.rollback()
+        logging.error("Failed to create player: %s", traceback.format_exc())
         return jsonify({
-            "error": "Failed to create player",
-            "details": str(e)
+            "error": "Failed to create player"
         }), 400
 
 @app.route('/campaigns/<int:campaign_id>/players', methods=['GET'])
