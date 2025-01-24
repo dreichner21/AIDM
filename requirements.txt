@@ -1,12 +1,22 @@
-flask==3.0.2
+flask==3.0.0
 google-generativeai==0.3.2
-python-dotenv==1.0.1
-SQLAlchemy==2.0.28
+python-dotenv==1.0.0
+SQLAlchemy==2.0.25
 alembic==1.13.1
 python-json-logger==2.0.7 
 gevent
 gevent-websocket
 eventlet
 websocket-client
-flask-socketio
+flask-socketio==5.3.6
 python-socketio
+flask-admin==1.6.1
+flask_sqlalchemy==3.1.1
+font-manager==0.3.0
+pillow
+flask-cors==4.0.0
+PySide
+websocket-client
+appdirs==1.4.4
+pywin32==306; sys_platform == 'win32'
+Flask-Migrate==4.0.5

@@ -1,204 +1,432 @@
+# ai_dm/server.py
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from wtforms import validators  # Add this with your other imports
+from wtforms.validators import DataRequired, Optional
+from wtforms import SelectField
+from flask_admin.form import Select2Field
+
 """
 server.py
 
-Flask + SocketIO server for the AI Dungeon Master application.
-Exposes REST endpoints and WebSocket events for creating and
-managing worlds, campaigns, players, and interactive sessions.
+Flask + SocketIO server for the AI Dungeon Master application,
+fully refactored to use function calling with Gemini 2.0 for DM responses.
 """
 
+import json
+from datetime import datetime
+
+# Import database first to avoid circular imports
+from ai_dm.database import db, migrate, init_db
+
+# Rest of imports
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
+from flask_sqlalchemy import SQLAlchemy
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
+from flask_cors import CORS
 
-# Import application logic from local modules
-from ai_dm.models import (
-    create_world, get_world_by_id,
-    create_campaign, get_campaign_by_id,
-    create_player, get_players_in_campaign,
-    get_sessions_by_campaign, get_player_by_id
-)
-from ai_dm.session_logic import (
-    start_session, record_interaction, end_session, get_session_recap
-)
-from ai_dm.llm import query_gpt, build_dm_context
-from ai_dm.db import init_db
+from ai_dm.models_orm import World, Campaign, Player, Session, Npc, PlayerAction
+from ai_dm.llm import query_dm_function, query_dm_function_stream, build_dm_context, determine_roll_type
 
-# Create Flask application and SocketIO
+# Create Flask app
 app = Flask(__name__)
+CORS(app)
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
+
+# Initialize database with new configuration
+init_db(app)
+
+# Initialize SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Initialize the database/tables
-init_db()
+# Try to import views, but don't fail if not found
+try:
+    from ai_dm.views import *
+except ImportError:
+    print("Views module not found - continuing without views")
 
-#
-# -- RESTful Endpoints --
-#
+# Create tables if they don't exist
+with app.app_context():
+    db.create_all()
+
+############################################################################
+# RESTful Endpoints
+############################################################################
 
 @app.route('/worlds', methods=['POST'])
 def create_new_world():
-    """
-    Create a new world by providing 'name' and 'description' in JSON.
-    Returns the new world's ID.
-    """
     data = request.json
-    world_id = create_world(data['name'], data['description'])
-    return jsonify({"world_id": world_id}), 201
+    new_world = World(
+        name=data['name'],
+        description=data['description']
+    )
+    db.session.add(new_world)
+    db.session.commit()
+    return jsonify({"world_id": new_world.world_id}), 201
 
 @app.route('/worlds/<int:world_id>', methods=['GET'])
 def get_world(world_id):
-    """
-    Retrieve details of a specific world by its ID.
-    """
-    world = get_world_by_id(world_id)
+    world = db.session.get(World, world_id)
     if not world:
         return jsonify({"error": "World not found"}), 404
-    return jsonify(world)
+
+    data = {
+        "world_id": world.world_id,
+        "name": world.name,
+        "description": world.description,
+        "created_at": world.created_at.isoformat() if world.created_at else None
+    }
+    return jsonify(data)
 
 @app.route('/campaigns', methods=['POST'])
 def create_new_campaign():
-    """
-    Create a new campaign by providing 'title', 'world_id', and an optional 'description'.
-    Returns the new campaign's ID.
-    """
     data = request.json
-    campaign_id = create_campaign(
-        data['title'],
-        data['world_id'],
-        data.get('description', '')
+    new_campaign = Campaign(
+        title=data['title'],
+        description=data.get('description', ''),
+        world_id=data['world_id']
     )
-    return jsonify({"campaign_id": campaign_id}), 201
+    db.session.add(new_campaign)
+    db.session.commit()
+    return jsonify({"campaign_id": new_campaign.campaign_id}), 201
 
 @app.route('/campaigns/<int:campaign_id>', methods=['GET'])
 def get_campaign(campaign_id):
-    """
-    Retrieve details of a specific campaign by its ID.
-    """
-    campaign = get_campaign_by_id(campaign_id)
+    campaign = db.session.get(Campaign, campaign_id)
     if not campaign:
         return jsonify({"error": "Campaign not found"}), 404
-    return jsonify(campaign)
+
+    data = {
+        "campaign_id": campaign.campaign_id,
+        "title": campaign.title,
+        "description": campaign.description,
+        "world_id": campaign.world_id,
+        "created_at": campaign.created_at.isoformat() if campaign.created_at else None
+    }
+    return jsonify(data)
+
+@app.route('/campaigns', methods=['GET'])
+def list_campaigns():
+    campaigns = Campaign.query.all()
+    results = []
+    for c in campaigns:
+        results.append({
+            "campaign_id": c.campaign_id,
+            "title": c.title,
+            "description": c.description,
+            "world_id": c.world_id,
+            "created_at": c.created_at.isoformat() if c.created_at else None
+        })
+    return jsonify(results)
 
 @app.route('/campaigns/<int:campaign_id>/players', methods=['POST'])
 def add_player(campaign_id):
-    """
-    Add a new player to a campaign. Requires 'name', 'character_name',
-    and optionally 'race', 'char_class', 'level'.
-    Returns the new player's ID.
-    """
     data = request.json
-    player_id = create_player(
-        campaign_id,
-        data['name'],
-        data['character_name'],
-        data.get('race'),
-        data.get('char_class'),
-        data.get('level', 1)
-    )
-    return jsonify({"player_id": player_id}), 201
+    
+    # Validate campaign exists
+    campaign = db.session.get(Campaign, campaign_id)
+    if not campaign:
+        return jsonify({"error": "Campaign not found"}), 404
+
+    try:
+        new_player = Player(
+            campaign_id=campaign_id,  # This is now guaranteed to exist
+            name=data['name'],
+            character_name=data['character_name'],
+            race=data.get('race', ''),  # Provide defaults for optional fields
+            class_=data.get('char_class', ''),
+            level=data.get('level', 1),
+            stats=data.get('stats', ''),
+            inventory=data.get('inventory', ''),
+            character_sheet=data.get('character_sheet', '')
+        )
+        db.session.add(new_player)
+        db.session.commit()
+        return jsonify({
+            "player_id": new_player.player_id,
+            "message": "Player successfully created"
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "error": "Failed to create player",
+            "details": str(e)
+        }), 400
 
 @app.route('/campaigns/<int:campaign_id>/players', methods=['GET'])
 def get_players(campaign_id):
-    """
-    List all players in a campaign.
-    """
-    players = get_players_in_campaign(campaign_id)
-    return jsonify(players)
+    players = Player.query.filter_by(campaign_id=campaign_id).all()
+    results = []
+    for p in players:
+        results.append({
+            "player_id": p.player_id,
+            "campaign_id": p.campaign_id,
+            "name": p.name,
+            "character_name": p.character_name,
+            "race": p.race,
+            "class_": p.class_,
+            "level": p.level,
+            "stats": p.stats,
+            "inventory": p.inventory,
+            "character_sheet": p.character_sheet,
+            "created_at": p.created_at.isoformat() if p.created_at else None
+        })
+    return jsonify(results)
 
 @app.route('/sessions/start', methods=['POST'])
 def start_new_session():
-    """
-    Start a new session for a given campaign.
-    Expects 'campaign_id' in JSON. Returns the new session's ID.
-    """
     data = request.json
     campaign_id = data['campaign_id']
-    session_id = start_session(campaign_id)
-    return jsonify({"session_id": session_id}), 201
+    new_session = Session(campaign_id=campaign_id)
+    db.session.add(new_session)
+    db.session.commit()
+    return jsonify({"session_id": new_session.session_id}), 201
 
 @app.route('/sessions/<int:session_id>/interact', methods=['POST'])
 def handle_interaction(session_id):
     """
-    Handle an interaction from a player during a session.
-    Expects JSON with 'user_input', 'campaign_id', 'world_id',
-    and optionally 'player_id'. Queries the AI for a DM response,
-    logs it, and broadcasts via SocketIO.
+    REST endpoint that uses function calling for DM responses.
     """
     data = request.json
+    # Check for required fields
+    required_fields = ['user_input', 'campaign_id', 'world_id', 'player_id']
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Missing required data, including player_id"}), 400
+        
     user_input = data['user_input']
     campaign_id = data['campaign_id']
     world_id = data['world_id']
-    player_id = data.get('player_id')
+    player_id = data['player_id']  # Now guaranteed to be present
+    roll_result = data.get('roll_result')  # New: Get roll result if provided
 
-    # Determine the player's label (e.g., character name)
-    player_label = "Player"
-    if player_id:
-        player = get_player_by_id(player_id)
-        if player and player['character_name']:
-            player_label = player['character_name']
-        else:
-            player_label = f"Player {player_id}"
+    # Get player info - no longer optional
+    player = db.session.get(Player, player_id)
+    if not player:
+        return jsonify({"error": "Invalid player_id"}), 404
+    player_label = player.character_name
 
-    # Build DM context (world/campaign/player info)
     context = build_dm_context(world_id, campaign_id, session_id)
 
-    # Provide a system message to the AI for more context
-    system_message = (
-        "You are an experienced Dungeons & Dragons Dungeon Master...\n"
-        f"Currently, {player_label} is speaking.\n\n"
-        + context
-    )
+    session_obj = db.session.get(Session, session_id)
+    if not session_obj:
+        return jsonify({"error": "Session not found"}), 404
 
-    # Get the DM's response from the AI
-    ai_response = query_gpt(user_input, system_message)
+    # Handle roll results if provided
+    if roll_result:
+        state = json.loads(session_obj.state_snapshot or '{}')
+        pending_roll = state.get('pending_roll', {})
+        original_action = pending_roll.get('original_action')
+        
+        if original_action:
+            # Include original action and roll result in context
+            context = build_dm_context(world_id, campaign_id, session_id)
+            context += f"\nPrevious attempt: {original_action}\nRoll result: {roll_result}"
+            
+            # Clear pending roll
+            state['pending_roll'] = {}
+            session_obj.state_snapshot = json.dumps(state)
+            db.session.commit()
+            
+            # Get DM's response with roll context
+            dm_response = query_dm_function(original_action, context, speaking_player_id=player_id, roll_result=roll_result)
+            return jsonify({"dm_response": dm_response})
 
-    # Record this interaction in the DB
-    record_interaction(session_id, user_input, ai_response, player_id=player_id)
+    # Remove the manual roll check here and let the LLM handle it
+    dm_response = query_dm_function(user_input, context, speaking_player_id=player_id)
+    
+    # Check if response contains a roll request
+    try:
+        response_data = json.loads(dm_response)
+        if "roll_request" in response_data:
+            return jsonify({
+                "dm_response": response_data["dm_message"],
+                "roll_request": response_data["roll_request"],
+                "requires_roll": True
+            })
+    except json.JSONDecodeError:
+        pass  # Continue with normal response handling if not JSON
 
-    # Broadcast the message to all WebSocket clients in this session's room
-    combined_msg = f"{player_label}: {user_input}\nDM: {ai_response}"
-    socketio.emit('new_message', {'message': combined_msg}, room=str(session_id))
+    # Validate response doesn't contain common errors
+    if dm_response.startswith("DM:") or "DM: DM:" in dm_response:
+        dm_response = dm_response.replace("DM:", "").replace("DM: DM:", "").strip()
 
-    # Return a formatted response for the REST caller
-    formatted_response = ai_response.replace('\n', '<br>')
-    return jsonify({"dm_response": formatted_response})
+    # Update session log
+    new_interaction = f"\n{player_label}: {user_input}\nDM: {dm_response}\n"
+    session_obj.session_log = (session_obj.session_log or "") + new_interaction
+    db.session.commit()
+
+    return jsonify({
+        "dm_response": dm_response,
+        "session_log": session_obj.session_log  # Add session log to response
+    })
 
 @app.route('/sessions/<int:session_id>/end', methods=['POST'])
 def end_game_session(session_id):
-    """
-    End a running session and get a text recap.
-    """
-    recap = end_session(session_id)
+    session_obj = db.session.get(Session, session_id)
+    if not session_obj:
+        return jsonify({"error": "Session not found"}), 404
+
+    full_log = session_obj.session_log if session_obj.session_log else ""
+    recap_prompt = (
+        "Please provide a concise summary of this D&D session, highlighting key events, "
+        "important decisions, and any significant character developments:\n\n" + full_log
+    )
+    # Using existing query_gpt for recap as it's a summarization task
+    recap = query_gpt(
+        prompt=recap_prompt,
+        system_message="You are a D&D session summarizer. Provide a clear, engaging recap."
+    )
+
+    state_snapshot = {
+        "recap": recap,
+        "ended_at": datetime.utcnow().isoformat()
+    }
+    session_obj.state_snapshot = json.dumps(state_snapshot)
+    db.session.commit()
+
     return jsonify({"recap": recap})
 
 @app.route('/sessions/<int:session_id>/recap', methods=['GET'])
 def get_session_summary(session_id):
-    """
-    Retrieve the recap for a completed session, if available.
-    """
-    recap = get_session_recap(session_id)
-    if not recap:
+    session_obj = db.session.get(Session, session_id)
+    if not session_obj:
+        return jsonify({"error": "Session not found"}), 404
+
+    if not session_obj.state_snapshot:
         return jsonify({"error": "Recap not available"}), 404
-    return jsonify({"recap": recap})
+
+    snapshot = json.loads(session_obj.state_snapshot)
+    return jsonify({"recap": snapshot.get("recap")})
 
 @app.route('/campaigns/<int:campaign_id>/sessions', methods=['GET'])
 def list_campaign_sessions(campaign_id):
-    """
-    List all sessions associated with a specific campaign.
-    """
-    sessions = get_sessions_by_campaign(campaign_id)
-    return jsonify(sessions)
+    sessions = Session.query.filter_by(campaign_id=campaign_id).all()
+    results = []
+    for s in sessions:
+        results.append({
+            "session_id": s.session_id,
+            "campaign_id": s.campaign_id,
+            "created_at": s.created_at.isoformat() if s.created_at else None
+        })
+    return jsonify(results)
 
-#
-# -- SocketIO Events --
-#
+@app.route("/process_action", methods=["POST"])
+def process_action():
+    try:
+        data = request.get_json()
+        action_text = data.get("action")
+        campaign_id = data.get("campaign_id")
+        world_id = data.get("world_id")
+        player_id = data.get("player_id")
+        session_id = data.get("session_id")
+
+        # Build context
+        context = build_dm_context(world_id, campaign_id, session_id)
+        
+        # Get DM's response
+        dm_response = query_dm_function(action_text, context, player_id)
+        
+        # Always check for rolls first
+        suggested_roll = determine_roll_type(action_text)
+        if suggested_roll:
+            return jsonify({
+                "success": True,
+                "message": "Before continuing, please make a roll:",
+                "roll_request": suggested_roll
+            })
+        
+        # Process normal response
+        try:
+            response_json = json.loads(dm_response)
+            if "roll_request" in response_json:
+                return jsonify({
+                    "success": True,
+                    "message": response_json.get("dm_message", ""),
+                    "roll_request": response_json["roll_request"]
+                })
+            
+            # No roll needed, return normal response
+            return jsonify({
+                "success": True,
+                "message": response_json.get("dm_message", "")
+            })
+            
+        except json.JSONDecodeError:
+            # If response isn't JSON, just return it as a message
+            return jsonify({
+                "success": True,
+                "message": dm_response
+            })
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+def handle_roll_request(response_json):
+    """Process any roll requests from the DM's response"""
+    if isinstance(response_json, str):
+        try:
+            response_json = json.loads(response_json)
+        except json.JSONDecodeError:
+            return None
+    
+    if "roll_request" in response_json:
+        roll_info = response_json["roll_request"]
+        return {
+            "needs_roll": True,
+            "roll_type": roll_info.get("type"),
+            "ability": roll_info.get("ability"),
+            "skill": roll_info.get("skill"),
+            "dc": roll_info.get("dc", 10),
+            "advantage": roll_info.get("advantage", False),
+            "disadvantage": roll_info.get("disadvantage", False)
+        }
+    return None
+
+@app.route('/campaigns/<int:campaign_id>/story', methods=['POST'])
+def update_campaign_story(campaign_id):
+    campaign = Campaign.query.get_or_404(campaign_id)
+    data = request.json
+    
+    if 'quest' in data:
+        campaign.current_quest = data['quest']
+    if 'location' in data:
+        campaign.location = data['location']
+    if 'plot_points' in data:
+        campaign.plot_points = json.dumps(data['plot_points'])
+    if 'active_npcs' in data:
+        campaign.active_npcs = json.dumps(data['active_npcs'])
+        
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/campaigns/<int:campaign_id>/events', methods=['POST'])
+def add_story_event(campaign_id):
+    data = request.json
+    event = StoryEvent(
+        campaign_id=campaign_id,
+        description=data['description'],
+        importance=data.get('importance', 5)
+    )
+    db.session.add(event)
+    db.session.commit()
+    return jsonify({"event_id": event.event_id})
+
+############################################################################
+# SocketIO Events
+############################################################################
 
 @socketio.on('join_session')
 def handle_join_session(data):
-    """
-    Event for a client to join a specific session "room" and
-    start receiving broadcasted messages for that session.
-    """
     session_id = data.get('session_id')
     if not session_id:
+        emit('error', {'message': 'Session ID is required to join.'})
         return
     join_room(str(session_id))
     emit('new_message', {
@@ -207,52 +435,293 @@ def handle_join_session(data):
 
 @socketio.on('send_message')
 def handle_send_message(data):
-    """
-    Event for a client to send a message to the DM in real-time
-    through SocketIO. Expects a dict with 'session_id', 'campaign_id',
-    'world_id', 'player_id', and the actual 'message'.
-    """
-    session_id = data.get('session_id')
-    user_input = data.get('message', '')
-    campaign_id = data.get('campaign_id')
-    world_id = data.get('world_id')
-    player_id = data.get('player_id')
+    """Enhanced real-time message handling with roll detection"""
+    # Validate required fields
+    required_fields = ['session_id', 'campaign_id', 'world_id', 'message', 'player_id']
+    if not all(data.get(field) for field in required_fields):
+        emit('error', {
+            'message': 'Missing required data',
+            'required_fields': required_fields
+        })
+        return
 
-    if not session_id or not campaign_id or not world_id:
-        return  # Cannot proceed without these essential pieces
+    session_id = data['session_id']
+    player_id = data['player_id']
+    roll_result = data.get('roll_result')
+    
+    # Get player info early - before any roll checks
+    player = db.session.get(Player, player_id)
+    if not player:
+        emit('error', {'message': 'Invalid player ID'})
+        return
+        
+    player_label = player.character_name  # Define player_label here, before roll checks
+    
+    if player.campaign_id != data['campaign_id']:
+        emit('error', {'message': 'Player not part of this campaign'})
+        return
 
-    # Get player data to identify them by character name or fallback label
-    player_data = get_player_by_id(player_id) if player_id else None
-    player_label = "Unknown Player"
-    if player_data and player_data['character_name']:
-        player_label = player_data['character_name']
-
-    # Build the DM context
-    context = build_dm_context(world_id, campaign_id, session_id)
-    system_message = (
-        "You are an experienced Dungeons & Dragons Dungeon Master.\n"
-        "There are multiple players with distinct characters.\n"
-        f"Currently, {player_label} is speaking.\n\n"
-        "Use these details to keep track of different characters:\n\n"
-        f"{context}\n\n"
-        "Do not confuse one character with another."
+    # Track player action with session_id
+    new_action = PlayerAction(
+        player_id=player_id,
+        session_id=session_id,
+        action_text=data['message'],
+        timestamp=datetime.utcnow()
     )
+    db.session.add(new_action)
+    db.session.commit()
 
-    # Generate AI response
-    ai_response = query_gpt(user_input, system_message)
+    session_obj = db.session.get(Session, session_id)
+    if not session_obj:
+        emit('error', {'message': 'Session not found'})
+        return
 
-    # Record the interaction in DB
-    record_interaction(session_id, user_input, ai_response, player_id=player_id)
+    # Broadcast message to all clients in the session EXCEPT sender
+    emit('new_message', {
+        'message': data['message'],
+        'speaker': player_label
+    }, room=str(session_id), include_self=False)  # exclude sender
 
-    # Broadcast to all clients in the session room
-    combined_msg = f"{player_label}: {user_input}\nDM: {ai_response}"
-    emit('new_message', {'message': combined_msg}, room=str(session_id))
+    if roll_result:
+        state = json.loads(session_obj.state_snapshot or '{}')
+        pending_roll = state.get('pending_roll', {})
+        original_action = pending_roll.get('original_action')
+        
+        if original_action:
+            context = build_dm_context(world_id, campaign_id, session_id)
+            context += f"\nPrevious attempt: {original_action}\nRoll result: {roll_result}"
+            
+            # Clear pending roll
+            state['pending_roll'] = {}
+            session_obj.state_snapshot = json.dumps(state)
+            db.session.commit()
+            
+            # Stream response with roll context
+            emit('dm_response_start', {'session_id': session_id}, room=str(session_id))
+            for chunk in query_dm_function_stream(original_action, context, speaking_player=speaking_player, roll_result=roll_result):
+                if chunk:
+                    emit('dm_chunk', {
+                        'chunk': chunk,
+                        'session_id': session_id
+                    }, room=str(session_id))
+                    socketio.sleep(0)
+            emit('dm_response_end', {'session_id': session_id}, room=str(session_id))
+            return
 
-#
-# -- Start server with SocketIO --
-#
+    # Remove the manual roll check here and let the LLM handle it
+    
+    # Rest of the existing function...
+    user_input = data['message']
+    campaign_id = data['campaign_id']
+    world_id = data['world_id']
+
+    # Get player info - no longer optional
+    player = db.session.get(Player, player_id)
+    if not player:
+        emit('error', {'message': 'Invalid player_id'}, room=str(session_id))
+        return
+
+    player_label = player.character_name
+    speaking_player = {
+        "character_name": player.character_name,
+        "player_id": str(player_id)
+    }
+
+    # Build context
+    context = build_dm_context(world_id, campaign_id, session_id)
+
+    # Signal start of DM response
+    emit('dm_response_start', {'session_id': session_id}, room=str(session_id))
+
+    # Stream DM response with speaker info
+    full_response = []
+    try:
+        response_text = ""
+        # First check if the action requires a roll
+        if determine_roll_type(user_input):
+            roll_message = "This action requires a roll before proceeding."
+            # Log roll request
+            new_interaction = f"\n{player_label}: {user_input}\nDM: {roll_message}\n"
+            session_obj.session_log = (session_obj.session_log or "") + new_interaction
+            db.session.commit()
+            
+            emit('roll_request', {
+                'roll_info': suggested_roll,
+                'message': roll_message,
+                'requires_roll': True
+            }, room=str(session_id))
+            return
+
+        # Stream DM response
+        for chunk in query_dm_function_stream(user_input, context, speaking_player=speaking_player):
+            if chunk:
+                chunk = chunk.replace("DM:", "").replace("DM: DM:", "").strip()
+                response_text += chunk
+                emit('dm_chunk', {
+                    'chunk': chunk,
+                    'session_id': session_id
+                }, room=str(session_id))
+                socketio.sleep(0)
+
+        # Update session log after complete response
+        if response_text:
+            new_interaction = f"\n{player_label}: {user_input}\nDM: {response_text}\n"
+            session_obj.session_log = (session_obj.session_log or "") + new_interaction
+            db.session.commit()
+
+            # Emit updated session log
+            emit('session_log_update', {
+                'session_log': session_obj.session_log,
+                'session_id': session_id
+            }, room=str(session_id))
+
+    except Exception as e:
+        print(f"Error in stream response: {e}")
+        emit('error', {
+            'message': f'Error generating response: {str(e)}'
+        }, room=str(session_id))
+    finally:
+        emit('dm_response_end', {'session_id': session_id}, room=str(session_id))
+
+############################################################################
+# Flask-Admin Setup
+############################################################################
+
+class PlayerModelView(ModelView):
+    form_columns = ('campaign_id', 'name', 'character_name', 'race', 'class_', 'level', 'stats', 'inventory', 'character_sheet')
+    column_list = ('campaign_id', 'name', 'character_name', 'race', 'class_', 'level')
+    
+    def create_form(self):
+        form = super(PlayerModelView, self).create_form()
+        
+        form.race = Select2Field('Race', choices=[
+            ('', 'Select Race'),
+            ('Human', 'Human'),
+            ('Elf', 'Elf'),
+            ('Dwarf', 'Dwarf'),
+            ('Halfling', 'Halfling'),
+            ('Dragonborn', 'Dragonborn'),
+            ('Tiefling', 'Tiefling'),
+            ('Half-Elf', 'Half-Elf'),
+            ('Half-Orc', 'Half-Orc'),
+            ('Gnome', 'Gnome')
+        ], validators=[DataRequired()])
+        
+        form.class_ = Select2Field('Class', choices=[
+            ('', 'Select Class'),
+            ('Fighter', 'Fighter'),
+            ('Wizard', 'Wizard'),
+            ('Cleric', 'Cleric'),
+            ('Rogue', 'Rogue'),
+            ('Ranger', 'Ranger'),
+            ('Paladin', 'Paladin'),
+            ('Barbarian', 'Barbarian'),
+            ('Bard', 'Bard'),
+            ('Druid', 'Druid'),
+            ('Monk', 'Monk'),
+            ('Sorcerer', 'Sorcerer'),
+            ('Warlock', 'Warlock')
+        ], validators=[DataRequired()])
+        
+        return form
+    
+    form_args = {
+        'campaign_id': {
+            'label': 'Campaign',
+            'validators': [DataRequired()]
+        },
+        'name': {
+            'label': 'Player Name',
+            'validators': [DataRequired()]
+        },
+        'character_name': {
+            'label': 'Character Name',
+            'validators': [DataRequired()]
+        },
+        'level': {
+            'default': 1,
+            'validators': [Optional()]
+        }
+    }
+
+    def on_model_change(self, form, model, is_created):
+        if is_created:
+            if not model.stats:
+                model.stats = '{}'
+            if not model.inventory:
+                model.inventory = '[]'
+            if not model.character_sheet:
+                model.character_sheet = '{}'
+            if not model.level:
+                model.level = 1
+
+class NpcModelView(ModelView):
+    form_columns = ('world_id', 'name', 'role', 'backstory')
+    column_list = ('world_id', 'name', 'role')
+    
+    def create_form(self):
+        form = super(NpcModelView, self).create_form()
+        form.role = Select2Field('Role', choices=[
+            ('', 'Select Role'),
+            ('Merchant', 'Merchant'),
+            ('Guard', 'Guard'),
+            ('Noble', 'Noble'),
+            ('Innkeeper', 'Innkeeper'),
+            ('Wizard', 'Wizard'),
+            ('Priest', 'Priest'),
+            ('Blacksmith', 'Blacksmith'),
+            ('Farmer', 'Farmer'),
+            ('Soldier', 'Soldier'),
+            ('Other', 'Other')
+        ], validators=[Optional()])
+        return form
+    
+    form_args = {
+        'world_id': {
+            'label': 'World',
+            'validators': [DataRequired()]
+        },
+        'name': {
+            'label': 'NPC Name',
+            'validators': [DataRequired()]
+        },
+        'backstory': {
+            'label': 'Backstory',
+            'validators': [Optional()]
+        }
+    }
+
+    def on_model_change(self, form, model, is_created):
+        if is_created and not model.backstory:
+            model.backstory = ''
+
+class CampaignModelView(ModelView):
+    form_columns = ('title', 'description', 'world_id', 'current_quest', 'location', 'plot_points', 'active_npcs')
+    column_list = ('title', 'world_id', 'current_quest', 'location')
+    
+    def on_model_change(self, form, model, is_created):
+        if is_created:
+            if not model.plot_points:
+                model.plot_points = '[]'
+            if not model.active_npcs:
+                model.active_npcs = '[]'
+            if not model.current_quest:
+                model.current_quest = ''
+            if not model.location:
+                model.location = ''
+
+# Update admin views - replace the Campaign view with our new one
+admin = Admin(app, name="AI-DM Admin", template_mode="bootstrap3")
+admin.add_view(ModelView(World, db.session))
+admin.add_view(CampaignModelView(Campaign, db.session))  # Changed this line
+admin.add_view(PlayerModelView(Player, db.session))
+admin.add_view(ModelView(Session, db.session))
+admin.add_view(NpcModelView(Npc, db.session))  # Changed this line
+admin.add_view(ModelView(PlayerAction, db.session))
+
+############################################################################
+# Main Entry Point
+############################################################################
 
 if __name__ == '__main__':
-    # Run the app with SocketIO
-    # Turn off debug=True in production
     socketio.run(app, debug=True)

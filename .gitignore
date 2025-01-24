@@ -1,0 +1,23 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Database
+*.db
+instance/
+ai_dm/instance/
+reset_db.py
+
+# Environment variables
+.env
