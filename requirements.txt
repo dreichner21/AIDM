@@ -6,7 +6,7 @@ alembic==1.13.1
 python-json-logger==2.0.7
 
 # Choose one async engine for Flask-SocketIO. Example using eventlet:
-eventlet==0.33.0
+eventlet==0.35.2
 websocket-client==1.5.2
 flask-socketio==5.3.6
 python-socketio==5.5.2
