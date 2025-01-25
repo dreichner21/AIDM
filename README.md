@@ -173,9 +173,9 @@ AIDM/
 ## Getting Started
 
 ### Installation 
-# PLEASE ENSURE YOU ARE IN BASH
 1. **Clone** the repository:
    ```bash
+   # PLEASE ENSURE YOU ARE IN BASH ON WINDOWS
    git clone https://github.com/dreichner21/AIDM.git
    cd AIDM
    ```
