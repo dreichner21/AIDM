@@ -172,7 +172,7 @@ AIDM/
 
 ## Getting Started
 
-### Installation
+### Installation PLEASE ENSURE YOU ARE IN BASH
 
 1. **Clone** the repository:
    ```bash
