@@ -175,7 +175,7 @@ AIDM/
 ### Installation 
 1. **Clone** the repository:
    ```bash
-   # PLEASE ENSURE YOU ARE IN BASH ON WINDOWS
+   # PLEASE ENSURE YOU ARE IN COMMAND PROMPT ON WINDOWS (CMD.EXE)
    git clone https://github.com/dreichner21/AIDM.git
    cd AIDM
    ```
