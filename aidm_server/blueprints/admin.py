@@ -7,7 +7,7 @@ from wtforms.validators import DataRequired, Optional
 from flask_admin.form import Select2Field
 
 from aidm_server.database import db
-from aidm_server.models import World, Campaign, Player, Session, Npc, PlayerAction
+from aidm_server.models import World, Campaign, Player, Session, Npc, PlayerAction, Map
 
 class PlayerModelView(ModelView):
     """
@@ -189,4 +189,5 @@ def configure_admin(app, db):
     admin.add_view(ModelView(Session, db.session))
     admin.add_view(NpcModelView(Npc, db.session))
     admin.add_view(ModelView(PlayerAction, db.session))
+    admin.add_view(ModelView(Map, db.session))
     return admin

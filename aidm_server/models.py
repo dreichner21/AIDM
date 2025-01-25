@@ -50,6 +50,34 @@ class Campaign(db.Model):
     
     world = db.relationship('World', backref='campaigns')
 
+class Map(db.Model):
+    """
+    Represents a map within a World or Campaign.
+
+    Attributes:
+        map_id (int): Primary key.
+        world_id (int): The ID of the world this map belongs to 
+        campaign_id (int): tie the map to a specific campaign.
+        title (str): Name or label for the map (e.g. "Overworld", "Dungeon Level 1").
+        description (str): High-level description or notes.
+        map_data (str): JSON data describing features, terrain, discovered areas, etc.
+        created_at (datetime): Timestamp for creation.
+    """
+    __tablename__ = 'maps'
+
+    map_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    world_id = db.Column(db.Integer, db.ForeignKey('worlds.world_id'), nullable=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.campaign_id'), nullable=True)
+    title = db.Column(db.String, nullable=False)
+    description = db.Column(db.Text)
+    map_data = db.Column(db.Text)  # Proposed JSON structure for storing key features
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    world = db.relationship('World', backref='maps')
+    campaign = db.relationship('Campaign', backref='maps')
+
+
 class Player(db.Model):
     """
     Represents a player in the game.
