@@ -3,20 +3,21 @@ google-generativeai==0.3.2
 python-dotenv==1.0.0
 SQLAlchemy==2.0.25
 alembic==1.13.1
-python-json-logger==2.0.7 
-gevent
-gevent-websocket
-eventlet
-websocket-client
+python-json-logger==2.0.7
+
+# Choose one async engine for Flask-SocketIO. Example using eventlet:
+eventlet==0.33.0
+websocket-client==1.5.2
 flask-socketio==5.3.6
-python-socketio
+python-socketio==5.5.2
+
 flask-admin==1.6.1
 flask_sqlalchemy==3.1.1
 font-manager==0.3.0
-pillow
+pillow==10.0.0
 flask-cors==4.0.2
-PySide
-websocket-client
+PySide6==6.5.1     # Updated to PySide6
+requests==2.31.0   # Added missing requests
 appdirs==1.4.4
 pywin32==306; sys_platform == 'win32'
 Flask-Migrate==4.0.5
