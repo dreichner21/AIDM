@@ -18,4 +18,3 @@ requests
 appdirs
 pywin32; sys_platform == 'win32'
 Flask-Migrate
-Hello
