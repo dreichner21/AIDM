@@ -14,6 +14,7 @@ from aidm_server.blueprints.players import players_bp
 from aidm_server.blueprints.sessions import sessions_bp
 from aidm_server.blueprints.socketio_events import register_socketio_events
 from aidm_server.blueprints.admin import configure_admin
+from aidm_server.blueprints.maps import maps_bp
 
 def create_app():
     """
@@ -33,6 +34,7 @@ def create_app():
     app.register_blueprint(worlds_bp, url_prefix='/api/worlds')
     app.register_blueprint(players_bp, url_prefix='/api/players')
     app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
+    app.register_blueprint(maps_bp, url_prefix='/api/maps')
 
     # Flask-Admin setup
     configure_admin(app, db)

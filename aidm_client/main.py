@@ -507,7 +507,7 @@ class SessionPage(BasePage):
         Create a new session on the server.
         """
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/sessions/start"  # Remove /api/
+        url = f"{base_url}/api/sessions/start"  # Remove /api/
         data = {"campaign_id": self.controller.campaign_id}
         try:
             resp = requests.post(url, json=data, timeout=5)
@@ -670,7 +670,7 @@ class PlayerCreateDialog(QDialog):
         Create a new player on the server.
         """
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/api/campaigns/{self.controller.campaign_id}/players"
+        url = f"{base_url}/api/players/campaigns/{self.controller.campaign_id}/players"
         data = {
             "name": self.name_edit.text().strip(),
             "character_name": self.char_name_edit.text().strip(),

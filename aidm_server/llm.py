@@ -11,7 +11,7 @@ import google.generativeai as genai
 from aidm_server.models import World, Campaign, Player, Session  # Changed from ai_dm.models_orm
 from datetime import datetime
 from sqlalchemy import desc
-from aidm_server.models import World, Campaign, Player, Session, PlayerAction
+from aidm_server.models import World, Campaign, Player, Session, PlayerAction, Map
 
 # Load environment variables
 load_dotenv()
@@ -394,6 +394,25 @@ def build_dm_context(world_id, campaign_id, session_id=None):
         if session_obj and session_obj.session_log:
             recent_events = f"\nRECENT EVENTS:\n{session_obj.session_log}"
 
+   
+    map_query = Map.query
+    if world_id:
+        map_query = map_query.filter_by(world_id=world_id)
+    elif campaign_id:
+        map_query = map_query.filter_by(campaign_id=campaign_id)
+
+    maps = map_query.all()
+    map_data_text = ""
+    for mp in maps:
+        try:
+            md = json.loads(mp.map_data) if mp.map_data else {}
+        except:
+            md = {}
+        # Summarize or list out key features
+        features = md.get('features', [])
+        # e.g., features might be list of { "name": "Old Ruins", "coordinates": [10, 20], ... }
+        map_data_text += f"\nMap: {mp.title}\nDescription: {mp.description}\nFeatures: {features}\n"
+
     context = (
         f"{world_summary}\n\n"
         f"{campaign_summary}\n\n"
@@ -401,6 +420,9 @@ def build_dm_context(world_id, campaign_id, session_id=None):
         f"{character_status}"
         f"{recent_events}"
     )
+
+    if map_data_text:
+        context += f"\nMAP INFORMATION:\n{map_data_text}"
     
     # Add campaign state
     campaign = Campaign.query.get(campaign_id)
