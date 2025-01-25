@@ -8,10 +8,9 @@ import os
 import json
 from dotenv import load_dotenv
 import google.generativeai as genai
-from aidm_server.models import World, Campaign, Player, Session  # Changed from ai_dm.models_orm
+from aidm_server.models import World, Campaign, Player, Session, PlayerAction, Map, SessionLogEntry
 from datetime import datetime
 from sqlalchemy import desc
-from aidm_server.models import World, Campaign, Player, Session, PlayerAction, Map
 
 # Load environment variables
 load_dotenv()
@@ -387,12 +386,18 @@ def build_dm_context(world_id, campaign_id, session_id=None):
             most_recent = data['recent_actions'][0]
             character_status += f"- {data['character_name']}: {most_recent} (Last Action)\n"
 
-    # Initialize recent_events before using it
+    # Replace session_log usage with SessionLogEntry
     recent_events = ""
     if session_id:
-        session_obj = Session.query.get(session_id)
-        if session_obj and session_obj.session_log:
-            recent_events = f"\nRECENT EVENTS:\n{session_obj.session_log}"
+        # Get recent session log entries
+        entries = SessionLogEntry.query.filter_by(session_id=session_id)\
+            .order_by(SessionLogEntry.timestamp.desc())\
+            .limit(10)\
+            .all()
+        if entries:
+            # Combine entries in reverse chronological order
+            entries.reverse()  # Make them chronological
+            recent_events = "\nRECENT EVENTS:\n" + "\n".join(e.message for e in entries)
 
    
     map_query = Map.query

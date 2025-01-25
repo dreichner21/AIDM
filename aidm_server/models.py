@@ -117,18 +117,18 @@ class Session(db.Model):
     Attributes:
         session_id (int): The unique identifier for the session.
         campaign_id (int): The ID of the campaign the session belongs to.
-        session_log (str): The log of the session.
         state_snapshot (str): The state snapshot of the session.
         created_at (datetime): The timestamp when the session was created.
     """
     __tablename__ = 'sessions'
     session_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.campaign_id'), nullable=False)
-    session_log = db.Column(db.Text)
     state_snapshot = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     campaign = db.relationship('Campaign', backref='sessions')
+    # Add relationship to SessionLogEntry
+    log_entries = db.relationship('SessionLogEntry', backref='session', cascade="all, delete-orphan")
 
 class Npc(db.Model):
     """
@@ -190,6 +190,24 @@ class StoryEvent(db.Model):
     description = db.Column(db.Text)
     importance = db.Column(db.Integer)  # 1-10 scale
     resolved = db.Column(db.Boolean, default=False)
+
+class SessionLogEntry(db.Model):
+    """
+    Stores individual log entries for each session.
+    """
+    __tablename__ = 'session_log_entries'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('sessions.session_id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    entry_type = db.Column(db.String, nullable=False)  # e.g. 'dm' or 'player'
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+def get_full_session_log(session_id):
+    """
+    Retrieve and assemble the complete session log for the given session_id.
+    """
+    entries = SessionLogEntry.query.filter_by(session_id=session_id).order_by(SessionLogEntry.timestamp).all()
+    return "\n".join(entry.message for entry in entries)
 
 if __name__ == '__main__':
     with db.engine.connect() as conn:

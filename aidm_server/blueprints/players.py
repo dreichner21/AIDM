@@ -86,3 +86,26 @@ def get_players(campaign_id):
     except Exception as e:
         logging.error("Failed to get players: %s", str(e))
         return jsonify({"error": "Failed to get players"}), 400
+
+@players_bp.route('/<int:player_id>', methods=['GET'])
+def get_player_by_id(player_id):
+    """
+    Retrieve a single player by player_id.
+    """
+    player = db.session.get(Player, player_id)
+    if not player:
+        return jsonify({"error": "Player not found"}), 404
+    
+    return jsonify({
+        "player_id": player.player_id,
+        "campaign_id": player.campaign_id,
+        "name": player.name,
+        "character_name": player.character_name,
+        "race": player.race,
+        "class_": player.class_,
+        "level": player.level,
+        "stats": player.stats,
+        "inventory": player.inventory,
+        "character_sheet": player.character_sheet,
+    })
+    

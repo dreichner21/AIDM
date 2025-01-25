@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request, jsonify
 from aidm_server.database import db
-from aidm_server.models import Session
+from aidm_server.models import Session, get_full_session_log
 from datetime import datetime
 import logging
 
@@ -49,7 +49,8 @@ def end_game_session(session_id):
         logging.warning(f"Session not found: ID {session_id}")
         return jsonify({"error": "Session not found"}), 404
 
-    full_log = session_obj.session_log or ""
+    full_log = get_full_session_log(session_id)
+    
     from aidm_server.llm import query_gpt
 
     recap_prompt = (

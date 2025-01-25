@@ -7,7 +7,7 @@ from wtforms.validators import DataRequired, Optional
 from flask_admin.form import Select2Field
 
 from aidm_server.database import db
-from aidm_server.models import World, Campaign, Player, Session, Npc, PlayerAction, Map
+from aidm_server.models import World, Campaign, Player, Session, Npc, PlayerAction, Map, SessionLogEntry
 
 class PlayerModelView(ModelView):
     """
@@ -170,7 +170,38 @@ class CampaignModelView(ModelView):
                 model.current_quest = ''
             if not model.location:
                 model.location = ''
+class SessionLogEntryModelView(ModelView):
+    """
+    Custom ModelView for SessionLogEntry, allowing admins to view/edit session logs.
 
+    Fields:
+      - session_id: Which session this log entry belongs to
+      - message: The actual text of the log
+      - entry_type: 'dm' or 'player'
+      - timestamp: When the log was created
+    """
+    # Which columns to show in the list view
+    column_list = ('id', 'session_id', 'entry_type', 'timestamp', 'message')
+
+    # Which columns to include when creating/editing
+    form_columns = ('session_id', 'entry_type', 'timestamp', 'message')
+
+    # Provide some defaults or validations if desired
+    form_args = {
+        'entry_type': {
+            'label': 'Entry Type (dm/player)',
+            'validators': [DataRequired()]
+        },
+        'message': {
+            'label': 'Log Message',
+            'validators': [DataRequired()]
+        },
+        'timestamp': {
+            'label': 'Timestamp (optional)',
+            'validators': [Optional()]
+        }
+    }
+            
 def configure_admin(app, db):
     """
     Configure Flask-Admin for the application.
@@ -190,4 +221,5 @@ def configure_admin(app, db):
     admin.add_view(NpcModelView(Npc, db.session))
     admin.add_view(ModelView(PlayerAction, db.session))
     admin.add_view(ModelView(Map, db.session))
+    admin.add_view(SessionLogEntryModelView(SessionLogEntry, db.session))
     return admin

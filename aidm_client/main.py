@@ -999,53 +999,81 @@ class ChatPage(BasePage):
 
     def update_chat_display(self, text):
         """
-        Update the chat display with new text.
+        Update the chat display with new text, handling line breaks properly.
         """
         cursor = self.chat_display.textCursor()
         cursor.movePosition(QTextCursor.End)
         
-        if self.is_streaming and text.startswith("DM: "):
-            # Remove previous incomplete line if streaming
-            cursor.movePosition(QTextCursor.StartOfLine, QTextCursor.KeepAnchor)
-            cursor.removeSelectedText()
-            cursor.deletePreviousChar()  # Remove newline
-            
-        cursor.insertText(text)
+        # Add extra spacing between messages if it starts with 'DM:' or 'Player' to visually separate
+        if text.strip().startswith(("DM:", "Player")):
+            if not self.chat_display.toPlainText().endswith("\n\n"):
+                cursor.insertText("\n")
+
+        # Check if this message starts with "You:" and replace with the player's character name
+        if text.strip().startswith("You:"):
+            base_url = self.controller.server_url.rstrip("/")
+            player_url = f"{base_url}/api/players/{self.controller.player_id}"
+            try:
+                # Attempt to fetch the player's character name
+                r = requests.get(player_url, timeout=5)
+                r.raise_for_status()
+                player_info = r.json()
+                # If player_info has 'character_name', use it
+                if 'character_name' in player_info:
+                    char_name = player_info['character_name']
+                    # Perform the actual replacement in text
+                    text = text.replace("You:", f"{char_name}:")
+                else:
+                    # Fallback: if for some reason there's no character_name
+                    text = text.replace("You:", "Player:")
+            except Exception:
+                # If request fails or times out, fallback to "Player:"
+                text = text.replace("You:", "Player:")
+
+        # Clean up the text while preserving intentional breaks
+        if text.strip():
+            # This step merges multiple lines into one; remove if you want each chunk on its own line
+            cleaned_text = " ".join(text.splitlines())
+            cursor.insertText(cleaned_text)
         
-        # Auto-scroll
+        # Insert a newline if the message ends with punctuation or if streaming has ended
+        if not self.is_streaming or text.strip().endswith((".", "!", "?")):
+            if not self.chat_display.toPlainText().endswith("\n"):
+                cursor.insertText("\n")
+        
+        # Optional: Smart scrolling—only scroll if near bottom
         scrollbar = self.chat_display.verticalScrollBar()
-        if scrollbar.value() >= scrollbar.maximum() - 4:
+        should_scroll = scrollbar.value() >= scrollbar.maximum() - 4
+        
+        if should_scroll:
             scrollbar.setValue(scrollbar.maximum())
+            self.chat_display.setTextCursor(cursor)
             self.chat_display.ensureCursorVisible()
 
     def send_message(self):
         """
-        Send a message to the server.
+        Send a message to the server and display it locally first.
         """
         msg = self.input_line.text().strip()
         if not msg:
             return
+            
+        # Clear input before processing to prevent double-send
         self.input_line.clear()
 
-        # Get player info to prefix the message
+        # Always display character name from local state
         base_url = self.controller.server_url.rstrip("/")
-        url = f"{base_url}/campaigns/{self.controller.campaign_id}/players"
+        url = f"{base_url}/api/players/{self.controller.player_id}"
         try:
-            r = requests.get(url)
-            if r.ok:
-                players = r.json()
-                player = next((p for p in players if p['player_id'] == self.controller.player_id), None)
-                if player:
-                    prefix = f"{player['character_name']}: "
-                else:
-                    prefix = "You: "
-            else:
-                prefix = "You: "
+            r = requests.get(url, timeout=5)
+            r.raise_for_status()
+            data = r.json()
+            char_name = data.get("character_name", "Unknown Player")
         except:
-            prefix = "You: "
+            char_name = "Unknown Player"
 
-        # Update chat display with the prefixed message
-        self.update_chat_signal.emit(f"\n{prefix}{msg}")
+        # Display message locally with character name and ensure spacing
+        self.update_chat_signal.emit(f"\n{char_name}: {msg}\n")
         QtWidgets.QApplication.processEvents()
 
         if not self.sio.connected:
