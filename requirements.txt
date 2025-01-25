@@ -14,7 +14,7 @@ python-socketio==5.5.2
 flask-admin==1.6.1
 flask_sqlalchemy==3.1.1
 font-manager==0.3.0
-pillow==10.0.0
+pillow==10.3.0
 flask-cors==4.0.2
 PySide6==6.5.1     # Updated to PySide6
 requests==2.31.0   # Added missing requests
