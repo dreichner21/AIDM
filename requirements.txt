@@ -17,7 +17,7 @@ font-manager==0.3.0
 pillow==10.0.0
 flask-cors==4.0.2
 PySide6==6.5.1     # Updated to PySide6
-requests==2.31.0   # Added missing requests
+requests==2.32.2   # Added missing requests
 appdirs==1.4.4
 pywin32==306; sys_platform == 'win32'
 Flask-Migrate==4.0.5
