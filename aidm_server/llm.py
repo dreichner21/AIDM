@@ -1,321 +1,178 @@
 """
 llm.py
 
-Module to handle all interactions with Google's Gemini 1.5 Pro model.
+Revised module for LLM interactions, with unused roll logic removed.
 """
 
 import os
 import json
 from dotenv import load_dotenv
 import google.generativeai as genai
-from aidm_server.models import World, Campaign, Player, Session, PlayerAction, Map, SessionLogEntry
 from datetime import datetime
 from sqlalchemy import desc
+
+from aidm_server.models import (
+    World, Campaign, Player, Session, PlayerAction,
+    Map, SessionLogEntry, CampaignSegment
+)
+from aidm_server.database import db
 
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini
 api_key = os.getenv("GOOGLE_GENAI_API_KEY")
 if not api_key:
     raise ValueError("GOOGLE_GENAI_API_KEY environment variable is not set")
-genai.configure(api_key=api_key)
 
-# Use single model for all operations
+genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-exp-1206")
 
-# Enhanced DM function schema with roll requests
-dm_function = {
-    "name": "DMResponse",
-    "description": "Return a JSON object containing the Dungeon Master's response to the players.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "dm_message": {
-                "type": "string",
-                "description": "A single string that represents the DM's message"
-            },
-            "speaking_player": {
-                "type": "object",
-                "required": ["character_name", "player_id"],
-                "properties": {
-                    "character_name": {"type": "string"},
-                    "player_id": {"type": "string"}
-                },
-                "description": "Information about which player character is speaking"
-            },
-            "roll_request": {
-                "type": "object",
-                "properties": {
-                    "type": {"type": "string", "enum": ["ability_check", "saving_throw", "attack_roll", "skill_check"]},
-                    "ability": {"type": "string", "enum": ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]},
-                    "skill": {"type": "string"},
-                    "dc": {"type": "integer"},
-                    "advantage": {"type": "boolean"},
-                    "disadvantage": {"type": "boolean"}
-                },
-                "description": "Details about any dice roll required from the player"
-            },
-            "referenced_players": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "character_name": {"type": "string"},
-                        "player_id": {"type": "string"}
-                    }
-                },
-                "description": "List of players referenced in the DM's response"
-            }
-        },
-        "required": ["dm_message", "speaking_player"]
-    }
-}
 
 def validate_dm_response(response_json, active_players):
-    """Validates the DM's response JSON against active players."""
-    if not isinstance(active_players, dict):
-        return False, "Invalid active players format"
-
-    # Validate speaking player
-    speaking_player = response_json.get("speaking_player")
-    if not speaking_player or not isinstance(speaking_player, dict):
-        return False, "Missing or invalid speaking player"
-
-    player_id = str(speaking_player.get("player_id"))
-    if player_id not in active_players:
-        return False, f"Unknown player ID: {player_id}"
-
-    # Validate referenced players
-    if "referenced_players" in response_json:
-        for player in response_json["referenced_players"]:
-            ref_id = str(player.get("player_id"))
-            if ref_id not in active_players:
-                return False, f"Referenced unknown player ID: {ref_id}"
-            
-            # Verify character name matches
-            if player.get("character_name") != active_players[ref_id]["character_name"]:
-                return False, "Character name mismatch"
-
-    # Validate roll request if present
-    if "roll_request" in response_json:
-        roll_request = response_json["roll_request"]
-        if not isinstance(roll_request, dict):
-            return False, "Invalid roll request format"
-            
-        required_roll_fields = ["type"]
-        if not all(field in roll_request for field in required_roll_fields):
-            return False, "Missing required roll request fields"
-            
-        valid_roll_types = ["ability_check", "saving_throw", "attack_roll", "skill_check"]
-        if roll_request["type"] not in valid_roll_types:
-            return False, "Invalid roll type"
-
+    """
+    (Optional) Validate structured JSON from the DM if needed.
+    Currently not enforced, but you could check references to players, etc.
+    """
     return True, None
 
-def determine_roll_type(action_text):
-    """Simplified helper function that no longer enforces scripted roll responses"""
-    return None  # Let the LLM handle roll detection naturally
 
-def query_dm_function(user_input, context, speaking_player_id=None, roll_result=None):
-    """Enhanced function calling version for DM responses with roll context"""
-    system_instructions = """
-    You are a Dungeons & Dragons Dungeon Master.
-    
-    CRITICAL RULES:
-    1. If a roll result is provided, use it to determine the outcome of the previous action
-    2. You must request rolls when appropriate for actions that require them
-    3. Be consistent with action resolutions based on roll results
-    4. For rolls of 20, describe critical success
-    5. For rolls of 1, describe critical failure
+def gather_segment_context(campaign_id):
     """
-
-    if roll_result:
-        system_instructions += f"\nA roll was made with result: {roll_result}. Resolve the previous action accordingly."
-
-    # First, check for combat/action that needs a roll
-    suggested_roll = determine_roll_type(user_input)
-    if suggested_roll:
-        return json.dumps({
-            "dm_message": "This action requires a roll.",
-            "roll_request": suggested_roll,
-            "requires_roll": True
-        })
-
-    system_instructions += """
-    You are a Dungeons & Dragons Dungeon Master. You MUST NEVER resolve actions that require rolls!
-    
-    CRITICAL RULES:
-    1. If a player attempts ANY combat action, STOP and request a roll
-    2. If a player tries to hit, attack, or harm something, STOP and request a roll
-    3. DO NOT narrate the outcome of attacks or combat actions
-    4. For combat, respond ONLY with "This action requires a roll" and wait for the roll
-    
-    For non-combat actions, proceed with normal narration.
+    Potentially gather data about segments/triggers.
+    Currently a placeholder.
     """
+    return {}
 
-    # Add explicit player identification to system instructions
-    system_instructions += f"""
-    IMPORTANT - PLAYER IDENTIFICATION:
-    - Current speaking player ID: {speaking_player_id}
-    - You must ALWAYS reference this exact player ID in your response
-    - Never invent actions for other players
-    - If you're unsure about player identity, respond with an error
+
+def build_dm_context(world_id, campaign_id, session_id=None):
     """
+    Build a context string for the DM logic:
+      - World info
+      - Campaign info
+      - Player data
+      - Recent session events
+      - Triggered segments
+      - Etc.
+    """
+    # 1. World data
+    world = World.query.get(world_id)
+    if not world:
+        world_summary = "World: Unknown\nDescription: No data."
+    else:
+        world_summary = f"World: {world.name}\nDescription: {world.description}"
 
-    # Determine if the action needs a roll
-    suggested_roll = determine_roll_type(user_input)
-    if suggested_roll:
-        system_instructions += f"\nSUGGESTED ROLL:\n{json.dumps(suggested_roll, indent=2)}"
+    # 2. Campaign data
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        campaign_summary = "Campaign: Unknown\nDescription: No data."
+    else:
+        campaign_summary = f"Campaign: {campaign.title}\nDescription: {campaign.description}"
 
-    # Add stringent check for roll requirements
-    if not determine_roll_type(user_input):
-        # Force a generic ability check if no specific roll type is detected
-        suggested_roll = {
-            "type": "ability_check",
-            "ability": "dexterity",
-            "dc": 12,
-            "advantage": False,
-            "disadvantage": False
+    # 3. Players
+    active_players = {}
+    players = Player.query.filter_by(campaign_id=campaign_id).all()
+    for player in players:
+        recent_actions = PlayerAction.query.filter_by(player_id=player.player_id)\
+            .order_by(PlayerAction.timestamp.desc()).limit(3).all()
+        action_history = [action.action_text for action in recent_actions]
+        active_players[str(player.player_id)] = {
+            "character_name": player.character_name,
+            "race": player.race,
+            "class": player.class_,
+            "level": player.level,
+            "recent_actions": action_history
         }
-        system_instructions += f"\nFORCED ROLL REQUEST:\n{json.dumps(suggested_roll, indent=2)}"
 
-    # Get player info for context
-    player_info = {}
-    if speaking_player_id:
-        player = Player.query.get(speaking_player_id)
-        if player:
-            player_info = {
-                "character_name": player.character_name,
-                "player_id": str(speaking_player_id)
-            }
+    active_players_text = "ACTIVE PLAYERS:\n" + json.dumps(active_players, indent=2)
 
-    full_prompt = (
-        f"{system_instructions}\n"
-        f"SPEAKING PLAYER:\n{json.dumps(player_info, indent=2)}\n"
-        f"CONTEXT:\n{context}\n"
-        f"PLAYER ACTION:\n{user_input}\n\n"
-        "Respond with properly formatted JSON only:"
+    # 4. Recent session log
+    recent_events = ""
+    if session_id:
+        entries = SessionLogEntry.query.filter_by(session_id=session_id)\
+            .order_by(SessionLogEntry.timestamp.desc())\
+            .limit(10).all()
+        if entries:
+            entries.reverse()
+            recent_events = "\nRECENT EVENTS:\n" + "\n".join(e.message for e in entries)
+
+    # 5. Triggered segments
+    triggered_segments = CampaignSegment.query.filter_by(
+        campaign_id=campaign_id,
+        is_triggered=True
+    ).all()
+    segment_text = ""
+    for seg in triggered_segments:
+        segment_text += f"\n[SEGMENT] {seg.title}\n{seg.description}\n"
+
+    # 6. Combine
+    context = (
+        f"{world_summary}\n\n"
+        f"{campaign_summary}\n\n"
+        f"{active_players_text}\n"
+        f"{recent_events}\n"
     )
+    if campaign:
+        context += f"\nCurrent Quest: {campaign.current_quest or 'None'}"
+        context += f"\nLocation: {campaign.location or 'Unknown'}"
+        # Potentially include campaign.plot_points or active_npcs as needed
 
-    try:
-        response = model.generate_content(full_prompt)
-        response_text = response.text.strip()
-        
-        # Remove any markdown formatting
-        if response_text.startswith("```json"):
-            response_text = response_text[7:-3]
-        elif response_text.startswith("```"):
-            response_text = response_text[3:-3]
-            
-        # Parse JSON response
+    context += f"\n{segment_text}"
+
+    return context
+
+
+def query_dm_function(user_input, context, speaking_player_id=None):
+    """
+    Non-streaming DM logic. You can request structured JSON or simple text.
+    We keep references to dice rolls if the story calls for them,
+    but do not handle the result server-side.
+    """
+    system_instructions = """
+You are a Dungeons & Dragons Dungeon Master.
+- Provide immersive, story-driven narrative.
+- If a player's action logically requires a dice roll (e.g., attack, skill check),
+  instruct the player to roll For example: "Roll a d20 to see if you hit"
+- Do not finalize success/failure of major actions without at least suggesting a roll.
+- Refer to triggered segments, player history, and the current location as needed.
+"""
+
+    full_prompt = f"{system_instructions}\nCONTEXT:\n{context}\n\nPLAYER ACTION:\n{user_input}\n"
+    response = model.generate_content(full_prompt)
+    response_text = response.text.strip()
+
+    # Optionally attempt to parse JSON if it starts with { or [
+    if response_text.startswith("{") or response_text.startswith("["):
         try:
             response_json = json.loads(response_text)
-            
-            # Check for roll request first
-            if "roll_request" in response_json:
-                return json.dumps({
-                    "dm_message": "Before proceeding with that action, a roll is required.",
-                    "roll_request": response_json["roll_request"]
-                })
-            
-            # Force correct player ID and name
-            if speaking_player_id and response_json.get("speaking_player"):
-                response_json["speaking_player"]["player_id"] = str(speaking_player_id)
-                # Override character name if we have player info
-                player = Player.query.get(speaking_player_id)
-                if player:
-                    response_json["speaking_player"]["character_name"] = player.character_name
-            
-            # Get active players from context
-            context_lines = context.split('\n')
-            active_players_json = ''
-            for i, line in enumerate(context_lines):
-                if line.startswith('ACTIVE PLAYERS:'):
-                    active_players_json = context_lines[i+1]
-                    break
-            active_players = json.loads(active_players_json)
-            
-            # Validate response
-            is_valid, error_msg = validate_dm_response(response_json, active_players)
-            if not is_valid:
-                return f"Error: {error_msg}"
-                
-            # Ensure dm_message is present
-            if "dm_message" not in response_json:
-                return "Error: Invalid response format"
-                
-            # Clean up the message
-            dm_message = response_json["dm_message"].strip()
-            dm_message = dm_message.replace("DM:", "").replace("DM: DM:", "")
-            
-            # Update response with cleaned message
-            response_json["dm_message"] = dm_message
-            
-            # Add player info if available
-            if player_info:
-                response_json["speaking_player"] = player_info
-                
-            return response_json["dm_message"]
-            
+            return response_json
         except json.JSONDecodeError:
-            print("Failed to parse JSON response:", response_text)
-            # If roll is needed based on action, return that instead of error
-            suggested_roll = determine_roll_type(user_input)
-            if suggested_roll:
-                return json.dumps({
-                    "dm_message": "A roll is required for this action.",
-                    "roll_request": suggested_roll
-                })
-            return "Error: Invalid JSON response from DM"
-            
-    except Exception as e:
-        print(f"Error during model generation: {e}")
-        return "I apologize, but I encountered an error processing your request."
+            pass
 
-def query_dm_function_stream(user_input, context, speaking_player=None, roll_result=None):
-    """Streaming version with roll context"""
-    # Remove the forced roll check here
-    if roll_result:
-        # ...existing roll result handling...
-        pass
+    return response_text
 
-    system_instructions = """
-    You are a Dungeons & Dragons Dungeon Master. Your response will be streamed,
-    so respond naturally with narrative text only (no JSON formatting needed).
-    
-    Rules:
-    1. NEVER speak as a player character
-    2. ONLY describe NPC actions, environment, and consequences
-    3. Use third person for player actions
-    4. Write in present tense
-    5. No prefixes like 'DM:' in responses
-    6. Maintain consistency with the current quest and location
-    7. Reference active NPCs naturally in responses
-    8. Develop open plot points through player interactions
-    9. Track party location and update as players move
-    10. Ensure all major actions advance the story
-    11. For any combat or skill-based actions, you must stop and request a roll first.
-    12. If a roll result is provided, use it to narrate the outcome of the previous action.
-    13. DO NOT narrate the roll itself in the outcome of the action.
-    13. Be dramatic and descriptive with critical successes (20) and failures (1).
+
+def query_dm_function_stream(user_input, context, speaking_player=None):
     """
-
-    if roll_result:
-        system_instructions += f"\nResolve the action using roll result: {roll_result}"
-    
-
-    # Add speaker context if available
-    speaker_info_text = ""
+    Streaming version that outputs narrative text chunk-by-chunk.
+    The DM can mention dice rolls and request them, but we are not
+    automatically interpreting or resolving them here.
+    """
+    system_instructions = """
+You are a Dungeons & Dragons DM. Provide descriptive, story-focused responses.
+If an action warrants a dice roll, explicitly request it from the player.
+"""
+    speaker_text = ""
     if speaking_player:
-        speaker_info_text = f"\nCurrent speaker is {speaking_player['character_name']} (ID: {speaking_player['player_id']}). Only attribute actions to this character.\n"
+        speaker_text = (
+            f"\nCurrent speaker: {speaking_player['character_name']} "
+            f"(ID: {speaking_player['player_id']})."
+        )
 
     full_prompt = (
         f"{system_instructions}\n"
-        f"{speaker_info_text}"
+        f"{speaker_text}\n"
         f"CONTEXT:\n{context}\n\n"
-        f"PLAYER INPUT:\n{user_input}\n\n"
-        "REMEMBER: Respond naturally as the DM, no special formatting needed."
+        f"PLAYER INPUT:\n{user_input}\n"
     )
 
     try:
@@ -324,128 +181,23 @@ def query_dm_function_stream(user_input, context, speaking_player=None, roll_res
             if chunk.text:
                 yield chunk.text.strip()
     except Exception as e:
-        print(f"Error during streaming generation: {e}")
-        yield "I apologize, but I encountered an error processing your request."
+        yield f"Error during streaming: {str(e)}"
+
 
 def query_gpt(prompt, system_message=None):
-    """Non-streaming LLM call. Retained for backward compatibility."""
+    """
+    Simple wrapper for quick queries (used e.g. in /end session).
+    """
     full_prompt = f"{system_message}\n\n{prompt}" if system_message else prompt
     response = model.generate_content(full_prompt)
     return response.text
 
+
 def query_gpt_stream(prompt, system_message=None):
-    """Streaming LLM call. Retained for backward compatibility."""
+    """
+    Streaming version for backward compatibility. 
+    """
     full_prompt = f"{system_message}\n\n{prompt}" if system_message else prompt
     response = model.generate_content(full_prompt, stream=True)
     for chunk in response:
         yield chunk.text
-
-def build_dm_context(world_id, campaign_id, session_id=None):
-    """Enhanced context builder with better player state tracking"""
-    world = World.query.get(world_id)
-    if not world:
-        world_summary = "World: Unknown\nDescription: No data."
-    else:
-        world_summary = f"World: {world.name}\nDescription: {world.description}"
-
-    campaign = Campaign.query.get(campaign_id)
-    if not campaign:
-        campaign_summary = "Campaign: Unknown\nDescription: No data."
-    else:
-        campaign_summary = f"Campaign: {campaign.title}\nDescription: {campaign.description}"
-
-    # Enhanced player tracking with more detailed state
-    active_players = {}
-    players = Player.query.filter_by(campaign_id=campaign_id).all()
-    
-    for player in players:
-        # Get last 3 actions for this specific player
-        recent_actions = PlayerAction.query.filter_by(
-            player_id=player.player_id  # This ties actions to specific players
-        ).order_by(desc(PlayerAction.timestamp)).limit(3).all()
-        
-        # Include player's recent actions in context
-        action_history = [action.action_text for action in recent_actions]
-        
-        active_players[str(player.player_id)] = {
-            "character_name": player.character_name,
-            "race": player.race,
-            "class": player.class_,
-            "level": player.level,
-            "recent_actions": action_history,  # Last 3 things this player did
-            "last_seen": recent_actions[0].timestamp.isoformat() if recent_actions else None
-        }
-
-    # Format active players section
-    active_players_text = "ACTIVE PLAYERS:\n" + json.dumps(active_players, indent=2)
-
-    # Add character status lens
-    character_status = "\nCHARACTER STATUS LENS:\n"
-    for player_id, data in active_players.items():
-        if data['recent_actions']:  # Only add if there are any actions
-            most_recent = data['recent_actions'][0]
-            character_status += f"- {data['character_name']}: {most_recent} (Last Action)\n"
-
-    # Replace session_log usage with SessionLogEntry
-    recent_events = ""
-    if session_id:
-        # Get recent session log entries
-        entries = SessionLogEntry.query.filter_by(session_id=session_id)\
-            .order_by(SessionLogEntry.timestamp.desc())\
-            .limit(10)\
-            .all()
-        if entries:
-            # Combine entries in reverse chronological order
-            entries.reverse()  # Make them chronological
-            recent_events = "\nRECENT EVENTS:\n" + "\n".join(e.message for e in entries)
-
-   
-    map_query = Map.query
-    if world_id:
-        map_query = map_query.filter_by(world_id=world_id)
-    elif campaign_id:
-        map_query = map_query.filter_by(campaign_id=campaign_id)
-
-    maps = map_query.all()
-    map_data_text = ""
-    for mp in maps:
-        try:
-            md = json.loads(mp.map_data) if mp.map_data else {}
-        except:
-            md = {}
-        # Summarize or list out key features
-        features = md.get('features', [])
-        # e.g., features might be list of { "name": "Old Ruins", "coordinates": [10, 20], ... }
-        map_data_text += f"\nMap: {mp.title}\nDescription: {mp.description}\nFeatures: {features}\n"
-
-    context = (
-        f"{world_summary}\n\n"
-        f"{campaign_summary}\n\n"
-        f"{active_players_text}\n"
-        f"{character_status}"
-        f"{recent_events}"
-    )
-
-    if map_data_text:
-        context += f"\nMAP INFORMATION:\n{map_data_text}"
-    
-    # Add campaign state
-    campaign = Campaign.query.get(campaign_id)
-    if campaign:
-        try:
-            npcs = json.loads(campaign.active_npcs) if campaign.active_npcs else []
-            plot_points = json.loads(campaign.plot_points) if campaign.plot_points else []
-        except json.JSONDecodeError:
-            npcs = []
-            plot_points = []
-        
-        context += f"\nCurrent Quest: {campaign.current_quest or 'None'}"
-        context += f"\nLocation: {campaign.location or 'Unknown'}"
-        
-        if plot_points:
-            context += "\nPlot Points:\n" + "\n".join([f"- {point}" for point in plot_points])
-        
-        if npcs:
-            context += "\nActive NPCs:\n" + "\n" + "\n".join([f"- {npc}" for npc in npcs])
-
-    return context

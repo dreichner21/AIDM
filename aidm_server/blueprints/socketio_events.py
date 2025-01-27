@@ -4,12 +4,15 @@ import json
 from datetime import datetime
 from flask_socketio import join_room, emit
 from aidm_server.database import db
-from aidm_server.models import Player, Session, PlayerAction, SessionLogEntry
+from aidm_server.models import (
+    Player, Session, PlayerAction, SessionLogEntry,
+    CampaignSegment
+)
+# Removed import of 'determine_roll_type' since it's no longer used
 from aidm_server.llm import (
     query_dm_function,
     query_dm_function_stream,
-    build_dm_context,
-    determine_roll_type
+    build_dm_context
 )
 
 def register_socketio_events(socketio):
@@ -19,9 +22,6 @@ def register_socketio_events(socketio):
 
     @socketio.on('join_session')
     def handle_join_session(data):
-        """
-        Handle a client joining a session.
-        """
         session_id = data.get('session_id')
         if not session_id:
             emit('error', {'message': 'Session ID is required to join.'})
@@ -34,7 +34,7 @@ def register_socketio_events(socketio):
     @socketio.on('send_message')
     def handle_send_message(data):
         """
-        Handle a client sending a message, stream DM responses, and store one final log entry.
+        Handle a client sending a message, then stream DM responses.
         """
         required_fields = ['session_id', 'campaign_id', 'world_id', 'message', 'player_id']
         if not all(data.get(field) for field in required_fields):
@@ -48,18 +48,18 @@ def register_socketio_events(socketio):
         campaign_id = data['campaign_id']
         world_id = data['world_id']
         player_id = data['player_id']
-        roll_result = data.get('roll_result')
 
         player = db.session.get(Player, player_id)
         if not player:
             emit('error', {'message': 'Invalid player ID'})
             return
-
-        player_label = player.character_name
         if player.campaign_id != campaign_id:
             emit('error', {'message': 'Player not part of this campaign'})
             return
 
+        player_label = player.character_name
+
+        # Record player action
         new_action = PlayerAction(
             player_id=player_id,
             session_id=session_id,
@@ -74,13 +74,13 @@ def register_socketio_events(socketio):
             emit('error', {'message': 'Session not found'})
             return
 
-        # Emit the player's message to others in the room
+        # Broadcast player's message
         emit('new_message', {
             'message': data['message'],
             'speaker': player_label
-        }, room=str(session_id), include_self=False)  # Don't echo back to sender
+        }, room=str(session_id), include_self=False)
 
-        # Store the player's message in SessionLogEntry
+        # Store in the session log
         player_msg_entry = SessionLogEntry(
             session_id=session_id,
             message=f"{player_label}: {data['message']}",
@@ -89,46 +89,34 @@ def register_socketio_events(socketio):
         db.session.add(player_msg_entry)
         db.session.commit()
 
-        # Check if we are resolving a roll
-        if roll_result:
-            state = json.loads(session_obj.state_snapshot or '{}')
-            pending_roll = state.get('pending_roll', {})
-            original_action = pending_roll.get('original_action')
-            
-            if original_action:
-                context = build_dm_context(world_id, campaign_id, session_id)
-                context += f"\nPrevious attempt: {original_action}\nRoll result: {roll_result}"
-                
-                state['pending_roll'] = {}
-                session_obj.state_snapshot = json.dumps(state)
+        # ---- CHECK FOR NEWLY TRIGGERED SEGMENTS ----
+        untriggered_segments = CampaignSegment.query.filter_by(
+            campaign_id=campaign_id,
+            is_triggered=False
+        ).all()
+
+        def check_segment_trigger(segment, campaign_id):
+            # Stub: Evaluate segment.trigger_condition for real logic
+            return False
+
+        for seg in untriggered_segments:
+            if check_segment_trigger(seg, campaign_id):
+                seg.is_triggered = True
+                db.session.commit()
+                emit('segment_triggered', {
+                    'segment_id': seg.segment_id,
+                    'title': seg.title
+                }, room=str(session_id))
+
+                log_entry = SessionLogEntry(
+                    session_id=session_id,
+                    message=f"**Segment Triggered**: {seg.title}",
+                    entry_type="dm"
+                )
+                db.session.add(log_entry)
                 db.session.commit()
 
-                emit('dm_response_start', {'session_id': session_id}, room=str(session_id))
-
-                try:
-                    for chunk in query_dm_function_stream(original_action, context, speaking_player=player_label, roll_result=roll_result):
-                        if chunk:
-                            emit('dm_chunk', {
-                                'chunk': chunk,
-                                'session_id': session_id
-                            }, room=str(session_id))
-                            
-                            # Store each chunk
-                            dm_entry_chunk = SessionLogEntry(
-                                session_id=session_id,
-                                message=f"DM (chunk): {chunk}",
-                                entry_type="dm"
-                            )
-                            db.session.add(dm_entry_chunk)
-                            db.session.commit()
-                except Exception as e:
-                    emit('error', {
-                        'message': f'Error generating response: {str(e)}'
-                    }, room=str(session_id))
-                finally:
-                    emit('dm_response_end', {'session_id': session_id}, room=str(session_id))
-                return
-
+        # ---- Generate DM Response ----
         user_input = data['message']
         speaking_player = {
             "character_name": player_label,
@@ -138,17 +126,17 @@ def register_socketio_events(socketio):
 
         emit('dm_response_start', {'session_id': session_id}, room=str(session_id))
 
-        dm_response_text = ""  # Accumulate chunks here
+        dm_response_text = ""
 
         try:
+            # Stream DM response
             for chunk in query_dm_function_stream(user_input, context, speaking_player=speaking_player):
                 if chunk:
                     emit('dm_chunk', {
                         'chunk': chunk,
                         'session_id': session_id
                     }, room=str(session_id))
-                    
-                    socketio.sleep(0)  # Ensure chunks are sent immediately
+                    socketio.sleep(0)  # ensure real-time chunk emission
                     dm_response_text += chunk
 
         except Exception as e:
@@ -158,7 +146,7 @@ def register_socketio_events(socketio):
         finally:
             emit('dm_response_end', {'session_id': session_id}, room=str(session_id))
 
-        # Store one final combined entry
+        # Store combined DM response in log
         if dm_response_text.strip():
             final_dm_entry = SessionLogEntry(
                 session_id=session_id,
