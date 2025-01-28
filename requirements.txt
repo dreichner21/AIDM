@@ -10,10 +10,7 @@ flask-socketio
 python-socketio
 flask-admin
 flask_sqlalchemy
-font-manager
-pillow
 flask-cors
-PySide6
 requests
 appdirs
 pywin32; sys_platform == 'win32'
