@@ -419,7 +419,7 @@ We encourage contributors to add tests alongside new features.
 
 ## License
 
-This project is licensed under the **MIT License**. You can find the full text of the license in the [LICENSE](LICENSE) file (or add one to the repository if not present).
+This project is licensed under the **MIT License**.
 
 ```
 MIT License
@@ -444,7 +444,7 @@ in the Software without restriction...
 
 For questions, feature requests, or bug reports:
 - **Open a GitHub Issue** on the repository.
-- **Email**: your_email@example.com (replace with a valid email address)
+- **Email**: dannyreichner@outlook.com
 
 ---
 
