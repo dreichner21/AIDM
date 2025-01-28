@@ -211,6 +211,10 @@ def register_socketio_events(socketio):
         }
         context = build_dm_context(world_id, campaign_id, session_id)
 
+        print("\n=== DM CONTEXT ===")
+        print(context)
+        print("=== END CONTEXT ===\n")
+
         emit('dm_response_start', {'session_id': session_id}, room=str(session_id))
 
         dm_response_text = ""

@@ -1,400 +1,300 @@
----
+# AI-DM (AI Dungeon Master)
 
-# AI-DM: AI Dungeon Master
+[![Python Version](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Flask](https://img.shields.io/badge/Flask-2.0%2B-green.svg)](https://palletsprojects.com/p/flask/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
-Welcome to **AI-DM (AI Dungeon Master)**, a Flask-based web application designed to assist in running tabletop RPG adventures (like *Dungeons & Dragons*) using a Large Language Model (LLM) as the automated “DM.” This codebase integrates with Google’s *Gemini* (or any API-compatible LLM service) to generate dynamic game narration, handle rules logic, and facilitate real-time storytelling.
+AI-DM (AI Dungeon Master) is a Flask-based web application designed to provide an AI-assisted experience for running tabletop RPG sessions (e.g., Dungeons & Dragons). It leverages Google's PaLM API (via the `google-generativeai` Python package) to generate dynamic, context-aware storytelling and DM (Dungeon Master) responses.
 
----
+The application supports creating and managing:
+- **Worlds** and the overall setting
+- **Campaigns** linked to those worlds
+- **Players** and their characters
+- **Sessions** (game logs, real-time interaction using Socket.IO)
+- **Maps** and **Segments** (story milestones, triggers, etc.)
+
+Whether you're a developer looking to extend or customize the AI logic or a player/DM wanting to experiment with AI-driven storytelling, AI-DM provides an interactive platform to bring your RPG sessions to life.
 
 ## Table of Contents
-1. [Overview](#overview)
-2. [Key Features](#key-features)
-3. [Architecture](#architecture)
-4. [Directory Structure](#directory-structure)
-5. [Detailed File Walkthrough](#detailed-file-walkthrough)
-6. [Getting Started](#getting-started)
-   - [Installation](#installation)
-   - [Environment Variables](#environment-variables)
-   - [Running the Server](#running-the-server)
-   - [Using the GUI Wizard](#using-the-gui-wizard)
-   - [Admin Interface](#admin-interface)
-7. [REST API Reference](#rest-api-reference)
-8. [Socket.IO Real-Time Interface](#socketio-real-time-interface)
-9. [Contributing](#contributing)
-10. [License](#license)
 
----
+1. [Installation Instructions](#installation-instructions)
+2. [Usage Instructions](#usage-instructions)
+3. [Accessing the GUI](#accessing-the-gui)
+4. [Features](#features)
+5. [API Documentation](#api-documentation)
+6. [Technologies Used](#technologies-used)
+7. [Project Structure](#project-structure)
+8. [Contributing Guidelines](#contributing-guidelines)
+9. [Testing Instructions](#testing-instructions)
+10. [Known Issues and Limitations](#known-issues-and-limitations)
+11. [License](#license)
+12. [Acknowledgments](#acknowledgments)
+13. [Contact Information](#contact-information)
+14. [Additional Information](#additional-information)
 
-## Overview
+## Installation Instructions
 
-**AI-DM** is a system that aims to replicate the role of a *Dungeon Master* in a tabletop RPG using advanced generative AI models. It provides:
+### Prerequisites
 
-- An **interactive chat** interface to guide players through an RPG scenario.
-- **Automated dice roll requests** and outcomes for combat or skill checks.
-- **Persistence** of campaigns, worlds, players, and sessions in an SQLite database.
-- **Real-time streaming** of the AI’s responses, allowing for a more natural back-and-forth conversation.
+- **Python 3.9+**
+- **pip** (or another Python package manager)
+- A **Google PaLM (Generative AI)** API key (set as an environment variable `GOOGLE_GENAI_API_KEY`)
+- (Optional) **Node.js** if you want to customize front-end or manage Socket.IO client setups from Node
 
-You can run the Flask-based server on your machine and optionally expose it to other players via tools like **ngrok**. Players can then connect from anywhere using the PySide6-based **GUI Wizard** or any custom UI you build on top of the **Socket.IO** endpoints.
+### Steps
 
----
-
-## Key Features
-
-1. **RESTful Endpoints** – Create and manage Worlds, Campaigns, Players, and Sessions via JSON-based APIs.
-2. **Socket.IO Real-Time Chat** – Supports streaming chunked responses from the AI, giving a smooth conversational experience.
-3. **AI Function Calling** – The code uses structured prompts (“function calling”) to enforce consistent DM responses, including roll requests.
-4. **SQLite Database** – Quickly get started with an on-disk SQLite file that the app auto-creates in the `instance/` folder.
-5. **Flask-Admin** – Includes an admin interface at `/admin` for editing database objects like worlds, campaigns, sessions, NPCs, etc.
-6. **PySide6 Wizard** – A cross-platform desktop client (`scripts/app.py`) that simplifies connecting to the server, selecting campaigns/sessions, and chatting as a player.
-
----
-
-## Architecture
-
-```
-                        aidm_client/main.py
-                     +-------------------------+
-                     |      PySide6 GUI        |
-                     | (Desktop Application)   |
-                     +-----------↑↓-----------+
-                        aidm_server/main.py
-                       Socket.IO/WebSockets
-                     +-----------↑↓-----------+
-                     |    Flask/WS Server      |
-                     | (REST API & Real-Time   |    
-                     |        Chat)            |
-                     +-----↑---------------↑---+
-                           |               |
-             HTTP/JSON     |               |   LLM API Integration
-                           |               |
-         +-----------------↓-+         +---↓----------------+
-         |  SQLite Database |         | External LLM Service|
-         | (SQLAlchemy ORM) |         | (e.g., Google GenAI,|
-         +------------------+         |    Gemini, etc.)    |
-                                      +---------------------+
-
-   Host Machine                  Friend's Machine 
-+-------------------+          +-----------------------+
-|  Flask Server     |          |      GUI Client       |
-|  - DB: local SQLite◄---ngrok---► Connects via API/   |
-|  - Port 5000      |          | Socket.IO to your IP  |
-+-------------------+          +-----------------------+
-
-```
-
-1. **Client (Wizard GUI)** – A PySide6 application that guides you to connect to the server, pick a campaign/session/player, and then interact with the AI DM in real time.
-2. **Flask + Socket.IO** – The server hosts both:
-   - A standard RESTful API for managing game entities (worlds, campaigns, players, sessions).
-   - A Socket.IO endpoint to handle live chat messages and stream AI responses.
-3. **SQLite Database** – By default, everything (world, campaign, session, NPC, and player data) is stored locally in `ai_dm/instance/dnd_ai_dm.db`. 
-4. **External LLM** – The server calls out to Google’s Generative AI endpoints (or any other configured provider) to generate DM responses based on your `.env` configuration.
-
----
-
-## Directory Structure
-
-```
-AIDM/
-├── aidm_client
-│   ├── main.py            # PySide6 GUI (entry point for the client)
-│   └── install_fonts.py   # Installs custom fonts on first run
-├── aidm_server
-│   ├── __init__.py
-│   ├── main.py            # Flask + Socket.IO server (entry point for the server)
-│   ├── database.py
-│   ├── llm.py
-│   ├── models.py
-│   ├── blueprints
-│   │   ├──__init__.py
-│   │   ├── admin.py
-│   │   ├── campaigns.py
-│   │   ├── players.py
-│   │   ├── sessions.py
-│   │   ├── socketio_events.py
-│   │   └── worlds.py
-├── assets
-│   ├── background.jpg
-│   └── fonts
-│       ├── MedievalSharp-Regular.ttf
-│       └── UnifrakturMaguntia-Regular.ttf
-├── requirements.txt
-└── README.md
-
-```
-
----
-
-## Detailed File Walkthrough
-
-### `aidmn_server/database.py`
-- Configures **Flask-SQLAlchemy** and Alembic migrations.
-- Initializes the SQLite database in `ai_dm/instance/dnd_ai_dm.db`.
-- Provides a function `init_db(app)` used by `server.py` to attach the DB to the Flask app.
-
-### `aidm_server/llm.py`
-- **Core LLM integration** with Google’s Generative AI (Gemini).
-- Contains advanced logic for:
-  - Function-calling prompt: specifying how the DM should respond in JSON (with `roll_request`, `speaking_player`, etc.).
-  - Validation of the DM’s JSON response, ensuring it references valid player IDs and includes proper formatting.
-  - Handling streaming text (`query_dm_function_stream`) if you want chunked responses for a more immersive feel.
-  - Building context from the database (world, campaign, recent player actions) to keep the AI’s replies consistent.
-
-### `aidm_server/models.py`
-- **SQLAlchemy model definitions** for:
-  - `World`, `Campaign`, `Player`, `Session`, `Npc`, `PlayerAction`, etc.
-- Each class maps to a database table in SQLite.
-
-### `aidm_server/main.py`
-- The **main Flask + SocketIO server** file:
-  - **REST endpoints** for managing worlds, campaigns, players, sessions, etc.
-  - **Socket.IO event handlers** to handle real-time chat messages, roll requests, and streaming DM responses.
-  - Uses `init_db(app)` to create or migrate the database.
-  - Contains an admin setup using `flask_admin` with custom forms and validation.
-
-### `aidm_client/main.py`
-- A **PySide6** desktop application that:
-  - Opens a multi-page “wizard” to:
-    1. Specify the server URL.
-    2. Select or create a campaign.
-    3. Select or create a session.
-    4. Select or create a player.
-    5. Enter the real-time chat screen, bridging Socket.IO to the AI DM.
-  - Installs fonts if needed (`install_fonts.py`) on first run.
-
-### `aidm_client/install_fonts.py`
-- Installs custom medieval-style fonts (e.g., *MedievalSharp*, *UnifrakturMaguntia*) into your system’s font directory.
-- Called automatically on the first run of the PySide6 wizard.
-
-### `assets/`
-- Contains resources like fonts and a background image for the GUI.
-
----
-
-## Getting Started
-
-### Installation 
-1. **Clone** the repository:
-   ```bash
-   # PLEASE ENSURE YOU ARE IN COMMAND PROMPT ON WINDOWS (CMD.EXE)
-   git clone https://github.com/dreichner21/AIDM.git
-   cd AIDM
-   ```
-
-2. (Recommended) Create and activate a **virtual environment**:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate   # or on Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-> **Note**: On Windows, if you see errors installing or importing `pywin32` or other dependencies, try updating `pip` first:  
-> `python -m pip install --upgrade pip`
-
-### Environment Variables
-
-**LLM API Key** – The core environment variable is:
-
-- `GOOGLE_GENAI_API_KEY` – Put your actual Google Generative AI key in a `.env` file or export it system-wide.
-
-Create a `.env` file at the project root with content like:
-
-```
-GOOGLE_GENAI_API_KEY=<YOUR_API_KEY>
-FLASK_SECRET_KEY=<SOME_RANDOM_SECRET_KEY>
-```
-
-> **Never commit** your `.env` file to source control.
-
-### Running the Server
-
-1. **Navigate** into the `aidm_server/` folder (or stay in root; either is fine):
-   ```bash
-   cd aidm_server
-   ```
-2. **Run the Flask server** (which also starts Socket.IO):
-   ```bash
-   # From aidm_server folder:
-   python main.py
-   
-   # OR from project root:
-   python -m aidm_server.main
-   ```
-3. By default, the server runs on `http://localhost:5000`. 
-
-   - It automatically creates the local SQLite DB (if not already present).
-   - The admin interface is at `http://localhost:5000/admin`.
-
-### Using the GUI Wizard
-
-In a **separate** terminal (with the same virtual environment active if you wish), run:
+1. **Clone the Repository**
 
 ```bash
-# From aidmn_client folder:
-python main.py
-
-# OR from project root:
-python -m aidm_client.main
+git clone https://github.com/yourusername/AIDM.git
+cd AIDM
 ```
 
-This **Qt** window will guide you through:
+2. **Create and Activate a Virtual Environment**
 
-1. **Server Page**: Enter the URL (`http://localhost:5000` if running locally).
-2. **Campaign Page**: Load or create a new campaign.
-3. **Session Page**: Load or create a session for your campaign.
-4. **Player Page**: Load or create your player character.
-5. **Chat Page**: Interact in real time with the AI DM. You can roll dice, see streaming responses, and play your campaign.
+```bash
+python -m venv venv
+source venv/bin/activate   # Linux/Mac
+# or
+venv\Scripts\activate      # Windows
+```
 
-### Admin Interface
+3. **Install Dependencies**
 
-Visit `http://localhost:5000/admin` in your web browser to:
+```bash
+pip install -r requirements.txt
+```
 
-- **Browse** and **edit** data for worlds, campaigns, players, sessions, or NPCs.
-- Use the CRUD forms to quickly fix campaign descriptions, player classes, or session logs.
+4. **Set Up Environment Variables**
 
-> **Tip**: If you want to share your server with friends, consider using **ngrok**:
-> ```bash
-> ngrok http 5000
-> ```
-> And provide them the forwarded HTTPS address to paste into their “Server URL” field in `app.py`.
+Create a `.env` file in the project root:
 
----
+```bash
+GOOGLE_GENAI_API_KEY=YOUR_API_KEY_HERE
+FLASK_SECRET_KEY=some_random_secret
+```
 
-## REST API Reference
+5. **Initialize the Database**
 
-All endpoints default to JSON-based communication. Below are commonly used endpoints:
+```bash
+flask db upgrade
+```
 
-### **Worlds**
-- **`POST /worlds`**  
-  Create a new world:  
+6. **Run the Application**
+
+```bash
+python -m aidm_server.main
+```
+
+The server runs on [http://localhost:5000](http://localhost:5000) by default.
+
+## Usage Instructions
+
+Once running, you can access:
+
+- **API Endpoints**: `http://localhost:5000/api/...`
+- **Flask Admin Panel**: `http://localhost:5000/admin`
+- **Socket.IO**: `ws://localhost:5000/socket.io/`
+
+### Quick Start Example
+
+1. **Create a World**
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+-d '{"name": "Faerun", "description": "A high-fantasy realm filled with magic."}' \
+http://localhost:5000/api/worlds
+```
+
+2. **Create a Campaign**
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+-d '{"title": "Dragons of the North", "description": "A quest to stop ancient dragons.", "world_id": 1}' \
+http://localhost:5000/api/campaigns
+```
+
+3. **Add Players**
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+-d '{"name": "Alice", "character_name": "Seraphina", "race": "Elf", "char_class": "Ranger", "level": 3}' \
+http://localhost:5000/api/players/campaigns/1/players
+```
+
+4. **Start a Session**
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+-d '{"campaign_id": 1}' \
+http://localhost:5000/api/sessions/start
+```
+
+## Accessing the GUI
+
+The official front-end GUI is available at [aidm-client.vercel.app](https://aidm-client.vercel.app).
+
+### Using Ngrok to Play With Friends
+
+1. **Download ngrok** from [https://ngrok.com/download](https://ngrok.com/download)
+
+2. **Expose Your Local Server**
+
+```bash
+ngrok http 5000
+```
+
+3. **Share the Ngrok URL** with your friends and use it as the Server URL in the GUI
+
+## Features
+
+- **Flask REST API** for worlds, campaigns, players, sessions, maps, and story segments
+- **Real-Time Interaction** using Socket.IO for live chat
+- **Automated Storytelling** leveraging Google PaLM
+- **Session Logging** for recaps and analysis
+- **Flask-Admin Interface** for database management
+- **Modular Blueprint Architecture**
+
+## API Documentation
+
+### Worlds
+
+- **POST `/worlds`**
   ```json
   {
-    "name": "Faerûn",
-    "description": "A vast land of sword & sorcery..."
+    "name": "Faerun",
+    "description": "A high-fantasy realm filled with magic."
   }
   ```
-- **`GET /worlds/<world_id>`**  
-  Fetch details of a specific world.
 
-### **Campaigns**
-- **`POST /campaigns`**  
-  Create a campaign in a given world:
+- **GET `/worlds/<world_id>`**
+
+### Campaigns
+
+- **POST `/campaigns`**
   ```json
   {
-    "title": "Dragon's Requiem",
-    "description": "...",
+    "title": "Dragons of the North",
+    "description": "A quest to stop ancient dragons.",
     "world_id": 1
   }
   ```
-- **`GET /campaigns`**  
-  List all campaigns.
 
-- **`GET /campaigns/<campaign_id>`**  
-  Get details of a specific campaign.
+- **GET `/campaigns`**
+- **GET `/campaigns/<campaign_id>`**
 
-### **Players**
-- **`POST /campaigns/<campaign_id>/players`**  
-  Add a new player to the campaign:
-  ```json
-  {
-    "name": "Alice",
-    "character_name": "Lyran",
-    "race": "Elf",
-    "char_class": "Wizard",
-    "level": 1
-  }
-  ```
-- **`GET /campaigns/<campaign_id>/players`**  
-  List all players in a campaign.
+### Players
 
-### **Sessions**
-- **`POST /sessions/start`**  
-  Start a new session for a campaign:
-  ```json
-  {
-    "campaign_id": 1
-  }
-  ```
-  Returns `{"session_id": <ID>}`
+- **POST `/players/campaigns/<campaign_id>/players`**
+- **GET `/players/campaigns/<campaign_id>/players`**
+- **GET `/players/<player_id>`**
 
-- **`POST /sessions/<session_id>/interact`**  
-  Send a single user input to the AI DM for a textual response (non-streaming):
-  ```json
-  {
-    "user_input": "I try to pick the lock.",
-    "campaign_id": 1,
-    "world_id": 1,
-    "player_id": 3
-  }
-  ```
-  Returns DM’s textual response in one piece.
+### Sessions
 
-- **`POST /sessions/<session_id>/end`**  
-  End the session, request a recap from the AI, and store it in the session’s data.
+- **POST `/sessions/start`**
+- **POST `/sessions/<session_id>/end`**
+- **GET `/sessions/campaigns/<campaign_id>/sessions`**
 
-- **`GET /sessions/<session_id>/recap`**  
-  Retrieve any stored session recap.
+### Socket.IO Events
 
----
+- `join_session`
+- `leave_session`
+- `send_message`
+- `player_joined`
+- `player_left`
+- `dm_chunk`
+- `dm_response_start`
+- `dm_response_end`
 
-## Socket.IO Real-Time Interface
+## Technologies Used
 
-The **PySide6** wizard uses Socket.IO events for real-time chat with streaming AI responses:
+- Python 3.9+
+- Flask
+- Flask-SocketIO
+- SQLAlchemy
+- Flask-Migrate
+- SQLite
+- Google PaLM API
+- Flask-Admin
+- Eventlet
 
-### Client → Server Events
+## Project Structure
 
-- **`join_session`**  
-  ```json
-  { "session_id": 123 }
-  ```
-  Joins a Socket.IO “room” for the session, so broadcast messages are properly routed.
+```
+AIDM/
+├── requirements.txt
+├── README.md
+└── aidm_server/
+    ├── blueprints/
+    │   ├── campaigns.py
+    │   ├── worlds.py
+    │   ├── players.py
+    │   ├── sessions.py
+    │   ├── segments.py
+    │   ├── maps.py
+    │   ├── admin.py
+    │   └── socketio_events.py
+    ├── __init__.py
+    ├── database.py
+    ├── llm.py
+    ├── main.py
+    └── models.py
+```
 
-- **`send_message`**  
-  ```json
-  {
-    "session_id": 123,
-    "campaign_id": 1,
-    "world_id": 1,
-    "player_id": 3,
-    "message": "I open the ancient door..."
-  }
-  ```
-  Sends a user (player) message to the DM. The server then streams back the AI’s response chunk-by-chunk.
+## Contributing Guidelines
 
-### Server → Client Events
+1. Fork the repository
+2. Create a feature branch
+3. Commit changes
+4. Push to your fork
+5. Create a Pull Request
 
-- **`new_message`**  
-  Broadcasts to all clients in the session, carrying a message with optional speaker info.
+Follow PEP 8 and include clear documentation.
 
-- **`dm_response_start`** / **`dm_chunk`** / **`dm_response_end`**  
-  Provide chunked (streaming) AI responses. Concatenate `dm_chunk` text segments until `dm_response_end` is received.
+## Testing Instructions
 
-- **`roll_request`**  
-  In some scenarios, the AI DM may request a dice roll. This event instructs the client to roll a d20 (with advantage/disadvantage, or ability checks, etc.).
+Currently, no dedicated test suites are included. We recommend:
 
-- **`error`**  
-  Emitted if something goes wrong (e.g., invalid session ID, missing fields).
+- Using Pytest or unittest
+- Creating a `tests/` directory
+- Adding test modules for each component
 
----
+## Known Issues and Limitations
 
-## Contributing
-
-1. **Fork** this repository.
-2. **Create a feature branch** for your changes.
-3. **Commit** thoroughly tested code.
-4. **Open a Pull Request** describing your changes and link any relevant issues.
-
-All contributions, large or small, are welcome.
-
----
+1. AI responses can vary in accuracy
+2. Session logs may grow large
+3. Segment trigger conditions need enhancement
+4. Lack of automated tests
 
 ## License
 
-This project is available under the [MIT License](LICENSE). You are free to use, modify, and distribute it as permitted.
+This project is licensed under the MIT License.
+
+## Acknowledgments
+
+- Google PaLM team
+- Flask maintainers
+- Socket.IO community
+- Open-source contributors
+
+## Contact Information
+
+- Open a GitHub Issue
+- Email: your_email@example.com
+
+## Additional Information
+
+### Deployment
+
+- Supports any Python/Socket.IO compatible platform
+- Remember to set environment variables
+
+### Roadmap
+
+1. Enhance segment trigger logic
+2. Integrate advanced AI features
+3. Add user-friendly front-end
 
 ---
 
-*Happy adventuring with your AI Dungeon Master!*
+<p align="center"><b>Thank you for using AI-DM! Enjoy your AI-driven RPG adventures.</b></p>
