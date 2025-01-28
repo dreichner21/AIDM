@@ -4,7 +4,7 @@
 [![Flask](https://img.shields.io/badge/Flask-2.0%2B-green.svg)](https://palletsprojects.com/p/flask/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
-AI-DM (AI Dungeon Master) is a Flask-based web application designed to provide an AI-assisted experience for running tabletop RPG sessions (e.g., Dungeons & Dragons). It leverages Google's PaLM API (via the `google-generativeai` Python package) to generate dynamic, context-aware storytelling and DM (Dungeon Master) responses.
+AI-DM (AI Dungeon Master) is a Flask-based web application designed to provide an AI-assisted experience for running tabletop RPG sessions (e.g., Dungeons & Dragons). It leverages Google's Gemini API (via the `google-generativeai` Python package) to generate dynamic, context-aware storytelling and DM (Dungeon Master) responses.
 
 The application supports creating and managing:
 - **Worlds** and the overall setting.
@@ -49,7 +49,7 @@ Whether you're a developer looking to extend or customize the AI logic or a play
 ### Prerequisites
 - **Python 3.9+**
 - **pip** (or another Python package manager)
-- A **Google PaLM (Generative AI)** API key (set as an environment variable `GOOGLE_GENAI_API_KEY`)
+- A **Google Gemini (Generative AI)** API key (set as an environment variable `GOOGLE_GENAI_API_KEY`)
 - (Optional) **Node.js** if you want to customize front-end or manage Socket.IO client setups from Node.
 
 ### Steps
@@ -74,12 +74,12 @@ Whether you're a developer looking to extend or customize the AI logic or a play
    ```
 
 4. **Set Up Environment Variables**
-   - **Google PaLM API Key**: Ensure you have a `.env` file in the project root (or your environment) with:
+   - **Google Gemini API Key**: Ensure you have a `.env` file in the project root (or your environment) with:
      ```bash
      GOOGLE_GENAI_API_KEY=YOUR_API_KEY_HERE
      FLASK_SECRET_KEY=some_random_secret
      ```
-   - Replace `YOUR_API_KEY_HERE` with your actual Google Generative AI (PaLM) key.
+   - Replace `YOUR_API_KEY_HERE` with your actual Google Generative AI (Gemini) key.
 
 5. **Initialize the Database**
    When you first run the Flask application, it will automatically create a local SQLite database in the `instance/` folder. If it does not, you can manually create it using:
@@ -192,7 +192,7 @@ If you want to play together with friends over the internet (without hosting on 
 
 - **Flask REST API** for worlds, campaigns, players, sessions, maps, and story segments.
 - **Real-Time Interaction** using Socket.IO for live chat between players and an AI-driven DM.
-- **Automated Storytelling** leveraging Google PaLM (Generative AI) for narrative, NPC dialogues, and dynamic events.
+- **Automated Storytelling** leveraging Google Gemini (Generative AI) for narrative, NPC dialogues, and dynamic events.
 - **Session Logging** to capture player actions and DM responses for recaps or analysis.
 - **Flask-Admin Interface** to manage data (worlds, campaigns, sessions, etc.) via a browser-based admin panel.
 - **Modular Blueprint Architecture** for clean separation of features and routes.
@@ -325,7 +325,7 @@ The application also supports real-time events using **Socket.IO**. Examples inc
 - **Flask-SocketIO** (real-time communication)
 - **SQLAlchemy** / **Flask-Migrate** (database ORM and migrations)
 - **SQLite** (default local database)
-- **google-generativeai** (integration with Google's PaLM API for text generation)
+- **google-generativeai** (integration with Google's Gemini API for text generation)
 - **Flask-Admin** (admin panel)
 - **dotenv** (environment variable management)
 - **eventlet** / **websocket-client** (for Socket.IO)
@@ -351,13 +351,13 @@ AIDM/
     │   └── socketio_events.py
     ├── __init__.py
     ├── database.py         # Database setup and initialization
-    ├── llm.py              # LLM interaction logic (Google PaLM)
+    ├── llm.py              # LLM interaction logic (Google Gemini)
     ├── main.py             # Application entry point
     └── models.py           # SQLAlchemy ORM models
 ```
 
 - **`blueprints/`**: Each file under this directory defines a specific set of related routes (e.g., `sessions.py`, `maps.py`) for better modularity.
-- **`llm.py`**: Contains logic to query the Google PaLM model with context built from the game data.
+- **`llm.py`**: Contains logic to query the Google Gemini model with context built from the game data.
 - **`main.py`**: The central Flask application runner. Sets up Socket.IO, registers blueprints, etc.
 - **`database.py`** and **`models.py`**: Database configurations and entity models.
 
@@ -410,7 +410,7 @@ We encourage contributors to add tests alongside new features.
 
 ## Known Issues and Limitations
 
-1. **AI Accuracy**: Responses from the Google PaLM model can vary and are sometimes not perfectly aligned with D&D rules.
+1. **AI Accuracy**: Responses from the Google Gemini model can vary and are sometimes not perfectly aligned with D&D rules.
 2. **Session Persistence**: Long-term session logs may grow large; a more robust archiving system may be needed for big campaigns.
 3. **Trigger Logic**: Segment trigger conditions are placeholders and need custom rules to be truly dynamic.
 4. **Testing**: Lack of automated tests means potential bugs might go unnoticed in certain workflows.
@@ -433,7 +433,7 @@ in the Software without restriction...
 
 ## Acknowledgments
 
-- **Google PaLM / Generative AI** team for providing the underlying language model.
+- **Google Gemini / Generative AI** team for providing the underlying language model.
 - **Flask** maintainers for the powerful yet lightweight Python framework.
 - **Socket.IO** community for real-time web communications.
 - All open-source contributors whose work made this project possible.
