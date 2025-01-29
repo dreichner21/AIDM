@@ -1,8 +1,4 @@
-"""
-llm.py
-
-Revised module for LLM interactions, with unused roll logic removed.
-"""
+# aidm_server/llm.py
 
 import os
 import json
@@ -15,7 +11,7 @@ from aidm_server.models import (
     World, Campaign, Player, Session, PlayerAction,
     Map, SessionLogEntry, CampaignSegment
 )
-from aidm_server.database import db
+from aidm_server.database import db, graph_db  # <--- Import the global graph_db here
 
 # Load environment variables
 load_dotenv()
@@ -52,7 +48,7 @@ def build_dm_context(world_id, campaign_id, session_id=None):
       - Player data
       - Recent session events
       - Triggered segments
-      - Etc.
+      - Additional graph relationships
     """
     # 1. World data
     world = World.query.get(world_id)
@@ -82,7 +78,6 @@ def build_dm_context(world_id, campaign_id, session_id=None):
             "level": player.level,
             "recent_actions": action_history
         }
-
     active_players_text = "ACTIVE PLAYERS:\n" + json.dumps(active_players, indent=2)
 
     # 4. Recent session log
@@ -104,7 +99,26 @@ def build_dm_context(world_id, campaign_id, session_id=None):
     for seg in triggered_segments:
         segment_text += f"\n[SEGMENT] {seg.title}\n{seg.description}\n"
 
-    # 6. Combine
+    # 6. Gather data from the graph (NPC relationships, etc.)
+    #    For demonstration, let's assume we want to check relationships for all NPCs in this world.
+    npc_relationship_text = ""
+    npcs_in_world = []
+    # We'll look up NPCs from the relational DB if we have them. 
+    # (You could also store the entire NPC set purely in Neo4j.)
+    from aidm_server.models import Npc
+    if world:
+        npcs_in_world = Npc.query.filter_by(world_id=world_id).all()
+
+    for npc in npcs_in_world:
+        rels = graph_db.get_npc_relationships(npc_id=npc.npc_id)
+        # Format as text for the prompt
+        npc_relationship_text += f"\nNPC {npc.name} (ID: {npc.npc_id}) relationships:\n"
+        for r in rels:
+            rel_type = r["relationship"]
+            other_node = r["node"]
+            npc_relationship_text += f"  - {rel_type} -> {other_node.get('name', 'Unknown')} (ID: {other_node.get('npc_id', '?')})\n"
+
+    # 7. Combine everything into a single context string
     context = (
         f"{world_summary}\n\n"
         f"{campaign_summary}\n\n"
@@ -114,33 +128,30 @@ def build_dm_context(world_id, campaign_id, session_id=None):
     if campaign:
         context += f"\nCurrent Quest: {campaign.current_quest or 'None'}"
         context += f"\nLocation: {campaign.location or 'Unknown'}"
-        # Potentially include campaign.plot_points or active_npcs as needed
+        # Optionally include campaign.plot_points or active_npcs
 
     context += f"\n{segment_text}"
+    context += f"\n--- GRAPH RELATIONSHIPS ---\n{npc_relationship_text}"
 
     return context
 
 
 def query_dm_function(user_input, context, speaking_player_id=None):
     """
-    Non-streaming DM logic. You can request structured JSON or simple text.
-    We keep references to dice rolls if the story calls for them,
-    but do not handle the result server-side.
+    Non-streaming DM logic: pass a prompt to the Generative AI model
+    and return the text (or JSON).
     """
     system_instructions = """
 You are a Dungeons & Dragons Dungeon Master.
 - Provide immersive, story-driven narrative.
-- If a player's action logically requires a dice roll (e.g., attack, skill check),
-  instruct the player to roll For example: "Roll a d20 to see if you hit"
-- Do not finalize success/failure of major actions without at least suggesting a roll.
+- If a player's action logically requires a dice roll, instruct them to roll.
 - Refer to triggered segments, player history, and the current location as needed.
 """
-
     full_prompt = f"{system_instructions}\nCONTEXT:\n{context}\n\nPLAYER ACTION:\n{user_input}\n"
     response = model.generate_content(full_prompt)
     response_text = response.text.strip()
 
-    # Optionally attempt to parse JSON if it starts with { or [
+    # Attempt to parse JSON if it starts with { or [
     if response_text.startswith("{") or response_text.startswith("["):
         try:
             response_json = json.loads(response_text)
@@ -153,9 +164,8 @@ You are a Dungeons & Dragons Dungeon Master.
 
 def query_dm_function_stream(user_input, context, speaking_player=None):
     """
-    Streaming version that outputs narrative text chunk-by-chunk.
-    The DM can mention dice rolls and request them, but we are not
-    automatically interpreting or resolving them here.
+    Streaming version of query_dm_function.
+    Sends the LLM response in chunks to the socket client.
     """
     system_instructions = """
 You are a Dungeons & Dragons DM. Provide descriptive, story-focused responses.
@@ -195,7 +205,7 @@ def query_gpt(prompt, system_message=None):
 
 def query_gpt_stream(prompt, system_message=None):
     """
-    Streaming version for backward compatibility. 
+    Streaming version for quick GPT queries.
     """
     full_prompt = f"{system_message}\n\n{prompt}" if system_message else prompt
     response = model.generate_content(full_prompt, stream=True)

@@ -5,6 +5,7 @@ from aidm_server.database import db
 from aidm_server.models import Session, get_full_session_log
 from datetime import datetime
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -59,10 +60,10 @@ def end_game_session(session_id):
     )
     try:
         recap = query_gpt(prompt=recap_prompt, system_message="You are a D&D session summarizer.")
-        session_obj.state_snapshot = jsonify({
+        session_obj.state_snapshot = json.dumps({
             "recap": recap,
             "ended_at": datetime.utcnow().isoformat()
-        }).data.decode("utf-8")
+        })
         db.session.commit()
         logging.info(f"Session ended with ID: {session_id}")
         return jsonify({"recap": recap})
