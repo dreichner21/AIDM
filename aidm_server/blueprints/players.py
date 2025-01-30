@@ -45,7 +45,7 @@ def add_player(campaign_id):
             name=data['name'],
             character_name=data['character_name'],
             race=data.get('race', ''),
-            class_=data.get('char_class', ''),
+            character_class=data.get('char_class', ''),  # Updated to match new column name
             level=data.get('level', 1)
         )
         db.session.add(new_player)
@@ -79,7 +79,7 @@ def get_players(campaign_id):
                 "name": p.name,
                 "character_name": p.character_name,
                 "race": p.race,
-                "class_": p.class_,
+                "char_class": p.character_class,  # Return as char_class to maintain API consistency
                 "level": p.level
             })
         return jsonify(results)
@@ -102,10 +102,10 @@ def get_player_by_id(player_id):
         "name": player.name,
         "character_name": player.character_name,
         "race": player.race,
-        "class_": player.class_,
+        "char_class": player.character_class,  # Return as char_class to maintain API consistency
         "level": player.level,
         "stats": player.stats,
         "inventory": player.inventory,
         "character_sheet": player.character_sheet,
     })
-    
+

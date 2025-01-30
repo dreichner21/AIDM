@@ -27,13 +27,11 @@ migrate = Migrate()
 
 # Global reference to our graph DB driver
 graph_db = None  # Will be set by init_graph_db
-_initialized = False
 
 def init_db(app):
     """
     Initialize the SQLite (or other SQL) database.
     """
-    global _initialized
     try:
         # Create instance directory if it doesn't exist
         instance_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance')
@@ -70,7 +68,7 @@ def init_graph_db(app):
     """
     Initialize the Neo4j Graph database connection using environment config.
     """
-    global graph_db, _initialized
+    global graph_db
     
     if graph_db is not None:
         return graph_db

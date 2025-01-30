@@ -15,6 +15,7 @@ from aidm_server.blueprints.players import players_bp
 from aidm_server.blueprints.sessions import sessions_bp
 from aidm_server.blueprints.maps import maps_bp
 from aidm_server.blueprints.segments import segments_bp  # NEW
+from aidm_server.blueprints.narrative import narrative_bp  # NEW: Add this line
 from aidm_server.blueprints.socketio_events import register_socketio_events
 from aidm_server.blueprints.admin import configure_admin
 
@@ -45,6 +46,7 @@ def create_app():
     app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
     app.register_blueprint(maps_bp, url_prefix='/api/maps')
     app.register_blueprint(segments_bp, url_prefix='/api/segments')
+    app.register_blueprint(narrative_bp, url_prefix="/api/narrative")  # NEW
 
     # Configure Flask-Admin
     configure_admin(app, db)

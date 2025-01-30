@@ -46,7 +46,7 @@ class Player(db.Model):
     name = db.Column(db.String, nullable=False)
     character_name = db.Column(db.String, nullable=False)
     race = db.Column(db.String)
-    class_ = db.Column(db.String)
+    character_class = db.Column(db.String)  # Renamed from class_
     level = db.Column(db.Integer, default=1)
     stats = db.Column(db.Text)
     inventory = db.Column(db.Text)
@@ -101,6 +101,7 @@ class SessionLogEntry(db.Model):
     message = db.Column(db.Text, nullable=False)
     entry_type = db.Column(db.String, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    structured_output = db.Column(db.Text, nullable=True)
 
 def get_full_session_log(session_id):
     entries = SessionLogEntry.query.filter_by(session_id=session_id).order_by(SessionLogEntry.timestamp).all()

@@ -52,17 +52,12 @@ class GraphDB:
                 raise
 
     # -------------------------------------------------------------------------
-    # Example: NPC Node Operations
+    # NPC Node Operations (existing code)
     # -------------------------------------------------------------------------
 
     def create_npc_node(self, npc_id: int, name: str, role: str) -> None:
         """
         Merge (create if not exists) an NPC node in the graph with properties.
-        
-        Args:
-            npc_id (int): Unique ID (from your SQL DB) for the NPC.
-            name (str): Display name of the NPC.
-            role (str): Role or short description (e.g. "Wizard").
         """
         query = """
             MERGE (n:NPC {npc_id: $npc_id})
@@ -81,12 +76,6 @@ class GraphDB:
     def get_npc_node(self, npc_id: int) -> dict:
         """
         Retrieve a single NPC node's properties by its npc_id.
-        
-        Args:
-            npc_id (int): The ID of the NPC to look up.
-
-        Returns:
-            dict: The node's properties as a dictionary, or {} if not found.
         """
         query = """
             MATCH (n:NPC {npc_id: $npc_id})
@@ -100,13 +89,7 @@ class GraphDB:
     def update_npc_node(self, npc_id: int, name: str = None, role: str = None) -> None:
         """
         Update an existing NPC node. If a field is None, we skip updating it.
-        
-        Args:
-            npc_id (int): The ID of the NPC to update.
-            name (str): New name (optional).
-            role (str): New role (optional).
         """
-        # We only SET the fields that are actually provided
         set_clauses = []
         params = {"npc_id": npc_id}
         
@@ -134,9 +117,6 @@ class GraphDB:
     def delete_npc_node(self, npc_id: int) -> None:
         """
         Delete an NPC node (and any relationships) by npc_id.
-
-        Args:
-            npc_id (int): The ID of the NPC to delete.
         """
         query = """
             MATCH (n:NPC {npc_id: $npc_id})
@@ -148,13 +128,6 @@ class GraphDB:
     def get_npc_relationships(self, npc_id: int) -> list:
         """
         Return all direct relationships for a given NPC node.
-        This includes relationships in both directions.
-        
-        Args:
-            npc_id (int): The ID of the NPC whose relationships we want.
-
-        Returns:
-            list: A list of dictionaries, each containing 'relationship' and 'node' keys.
         """
         query = """
             MATCH (n:NPC {npc_id: $npc_id})-[r]-(m)
@@ -172,7 +145,7 @@ class GraphDB:
         return rels
 
     # -------------------------------------------------------------------------
-    # Relationship Methods
+    # Relationship Methods (existing code)
     # -------------------------------------------------------------------------
 
     def create_relationship(
@@ -187,15 +160,6 @@ class GraphDB:
         Merge a relationship (rel_type) between two existing nodes identified by:
           - (start_label { npc_id = start_key })
           - (end_label { npc_id = end_key })
-        
-        If the nodes or relationship do not exist, they will be created or merged.
-
-        Args:
-            start_label (str): The label of the start node (e.g., 'NPC').
-            start_key (int): The ID property for the start node (usually npc_id).
-            end_label (str): The label of the end node (e.g., 'NPC').
-            end_key (int): The ID property for the end node (usually npc_id).
-            rel_type (str): The type of the relationship to MERGE (e.g., 'ALLY_OF').
         """
         query = f"""
             MERGE (a:{start_label} {{npc_id: $start_key}})
@@ -223,14 +187,6 @@ class GraphDB:
     ) -> None:
         """
         Delete a specific relationship of rel_type between two known nodes.
-        Does NOT delete the nodes themselves.
-        
-        Args:
-            start_label (str): The label of the start node (e.g., 'NPC').
-            start_key (int): The ID property for the start node.
-            end_label (str): The label of the end node (e.g., 'NPC').
-            end_key (int): The ID property for the end node.
-            rel_type (str): The exact relationship type to remove (e.g., 'ALLY_OF').
         """
         query = f"""
             MATCH (a:{start_label} {{npc_id: $start_key}})-[r:{rel_type}]->(b:{end_label} {{npc_id: $end_key}})
@@ -247,18 +203,12 @@ class GraphDB:
         )
 
     # -------------------------------------------------------------------------
-    # Example: Generic Helpers
+    # Example: Generic Helpers (existing code)
     # -------------------------------------------------------------------------
 
     def get_all_nodes_of_label(self, label: str) -> list:
         """
         Return all nodes of a given label, with their properties.
-
-        Args:
-            label (str): The Neo4j label to match (e.g. 'NPC').
-
-        Returns:
-            list of dict: Each dict contains the node's properties.
         """
         query = f"""
             MATCH (n:{label})
@@ -275,18 +225,7 @@ class GraphDB:
     ) -> list:
         """
         Search for nodes of a given label by a string property match.
-        This example uses a case-insensitive partial match (contains).
-        
-        Args:
-            label (str): The Neo4j label to match (e.g. 'NPC').
-            property_name (str): The property name to filter on (e.g. 'name').
-            property_value (str): The substring to search in that property.
-
-        Returns:
-            list: A list of matching node properties as dictionaries.
         """
-        # For partial matches, we can use `(?i).*<value>.*` for case-insensitive
-        # You might also consider a fulltext index or a more advanced query in production.
         query = f"""
             MATCH (n:{label})
             WHERE toLower(n.{property_name}) CONTAINS toLower($value)
@@ -295,3 +234,129 @@ class GraphDB:
         params = {"value": property_value}
         results = self.run_query(query, params)
         return [r["props"] for r in results]
+
+    # -------------------------------------------------------------------------
+    # NEW: Narrative & Momentum Methods
+    # -------------------------------------------------------------------------
+
+    def create_plotpoint(self, plotpoint_id: int, volatility: float = 1.0, **kwargs):
+        """
+        Merge a PlotPoint node with given ID (unique in your system),
+        a volatility factor, and any additional properties from kwargs.
+        """
+        set_clauses = [f"pp.volatility = $volatility"]
+        for k in kwargs:
+            set_clauses.append(f"pp.{k} = ${k}")
+        set_statement = ", ".join(set_clauses)
+        
+        query = f"""
+            MERGE (pp:PlotPoint {{plotpoint_id: $plotpoint_id}})
+            SET {set_statement}
+            RETURN pp
+        """
+        params = {"plotpoint_id": plotpoint_id, "volatility": volatility}
+        for k, v in kwargs.items():
+            params[k] = v
+        
+        self.run_query(query, params)
+        logging.info(f"PlotPoint created/updated with ID={plotpoint_id}, volatility={volatility}")
+
+    def link_action_to_plotpoint(self, action_id: int, plotpoint_id: int, weight: float):
+        """
+        Create or merge an IMPACTS relationship between an Action node and a PlotPoint.
+        """
+        query = """
+            MATCH (a:Action {action_id: $action_id}), (pp:PlotPoint {plotpoint_id: $plotpoint_id})
+            MERGE (a)-[r:IMPACTS]->(pp)
+            SET r.weight = $weight
+            RETURN r
+        """
+        params = {
+            "action_id": action_id,
+            "plotpoint_id": plotpoint_id,
+            "weight": weight
+        }
+        self.run_query(query, params)
+        logging.info(f"Action {action_id} linked to PlotPoint {plotpoint_id} with weight={weight}")
+
+    def create_action_node(self, action_id: int, session_id: int, text: str, severity: float = 1.0):
+        """
+        Merge an Action node identified by action_id with relevant properties.
+        """
+        query = """
+            MERGE (a:Action {action_id: $action_id})
+            SET a.session_id = $session_id,
+                a.text = $text,
+                a.timestamp = timestamp(),
+                a.severity = $severity
+            RETURN a
+        """
+        params = {
+            "action_id": action_id,
+            "session_id": session_id,
+            "text": text,
+            "severity": severity
+        }
+        self.run_query(query, params)
+        logging.info(f"Action node created/updated, ID={action_id}, session={session_id}")
+
+    def attach_player_to_action(self, player_id: int, action_id: int):
+        """
+        Optional: link an existing Player node to an Action node via :PERFORMED or similar.
+        """
+        query = """
+            MATCH (p:Player {player_id: $player_id}), (a:Action {action_id: $action_id})
+            MERGE (p)-[r:PERFORMED]->(a)
+            RETURN r
+        """
+        params = {
+            "player_id": player_id,
+            "action_id": action_id
+        }
+        self.run_query(query, params)
+        logging.info(f"Player {player_id} linked with Action {action_id}")
+
+    def calculate_session_momentum(self, session_id: int) -> float:
+        """
+        Calculates total momentum by summing (weight * volatility) on (Action)-[:IMPACTS]->(PlotPoint).
+        """
+        query = """
+            MATCH (a:Action)-[r:IMPACTS]->(pp:PlotPoint)
+            WHERE a.session_id = $session_id
+            RETURN sum(r.weight * pp.volatility) AS total_momentum
+        """
+        results = self.run_query(query, {"session_id": session_id})
+        if results and results[0]["total_momentum"] is not None:
+            val = results[0]["total_momentum"]
+            return float(val)
+        return 0.0
+
+    def cascade_triggers(self, session_id: int, threshold: float):
+        """
+        If any PlotPoint's 'momentum' crosses threshold, automatically link to a 'MajorEvent' node.
+        This is just an example of auto-trigger logic.
+        """
+        query = """
+            MATCH (a:Action {session_id: $session_id})-[r:IMPACTS]->(pp:PlotPoint)
+            WITH pp, sum(r.weight * pp.volatility) AS momentum
+            WHERE momentum > $threshold
+            MERGE (pp)-[tr:ACTIVATES]->(me:MajorEvent {name: 'AutoTriggeredEvent'})
+            RETURN pp, me
+        """
+        self.run_query(query, {"session_id": session_id, "threshold": threshold})
+        logging.info(f"Cascade triggers executed for session {session_id} with threshold={threshold}")
+
+    def decay_relationships(self, decay_rate: float = 0.1):
+        """
+        Example that reduces the weight of IMPACTS relationships globally,
+        or you could parameterize by session or time-based logic.
+        """
+        query = """
+            MATCH ()-[r:IMPACTS]->()
+            SET r.weight = r.weight - $decay
+            WHERE r.weight < 0
+            DELETE r
+        """
+        params = {"decay": decay_rate}
+        self.run_query(query, params)
+        logging.info(f"Decayed IMPACTS relationships by {decay_rate}; removed any that fell below 0.")
