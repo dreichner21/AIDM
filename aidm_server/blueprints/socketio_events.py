@@ -150,9 +150,9 @@ def register_socketio_events(socketio):
                 RETURN p
             """, 
             {
-                "pid": player_id,  # Added missing comma here
-                "player_name": player_name,
-                "character_name": character_name
+                "pid": player_id,
+                "player_name": player.name,
+                "character_name": player.character_name
             }
         )
             graph_db.attach_player_to_action(player_id, new_action.action_id)
@@ -252,6 +252,7 @@ def register_socketio_events(socketio):
                     'chunk': chunk,
                     'session_id': session_id
                 }, room=str(session_id))
+                socketio.sleep(0)  # Yield control back to event loop
 
         emit('dm_response_end', {'session_id': session_id}, room=str(session_id))
 
